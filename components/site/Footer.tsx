@@ -61,7 +61,7 @@ export function Footer() {
             Fish, Trash Tycoon.
           </p>
           <p className="text-xs text-zinc-200/50">
-            © {new Date().getFullYear()} Snoxium. All rights reserved.
+            © {new Date().getFullYear()} Snoxium Games. All rights reserved.
           </p>
         </div>
       </div>
