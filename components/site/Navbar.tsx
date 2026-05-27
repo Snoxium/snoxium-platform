@@ -42,7 +42,17 @@ export function Navbar() {
           </Link>
         </div>
       </div>
+      <div className="mx-auto flex max-w-6xl items-center gap-6 px-5 pb-3 text-xs font-medium text-zinc-200/70 md:hidden">
+        {NAV_LINKS.map((link) => (
+          <Link
+            key={link.href}
+            href={link.href}
+            className="transition hover:text-zinc-50"
+          >
+            {link.label}
+          </Link>
+        ))}
+      </div>
     </header>
   );
 }
-
