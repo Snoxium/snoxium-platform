@@ -69,7 +69,7 @@ export default function Home() {
                 </div>
               </div>
               <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-zinc-200/70">
-                Built for connected serverse, multiplayer experiences, and shared
+                Built for connected servers, multiplayer experiences, and shared
                 systems that evolve over time.
               </div>
             </div>

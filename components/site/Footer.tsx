@@ -30,6 +30,12 @@ export function Footer() {
             <Link href="/about" className="block transition hover:text-zinc-50">
               About
             </Link>
+            <Link
+              href="/privacy"
+              className="block transition hover:text-zinc-50"
+            >
+              Privacy
+            </Link>
           </div>
           <div className="space-y-3">
             <div className="text-xs font-medium tracking-widest text-zinc-200/60">
@@ -62,4 +68,3 @@ export function Footer() {
     </footer>
   );
 }
-
