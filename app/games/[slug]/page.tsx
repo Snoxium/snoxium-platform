@@ -30,6 +30,35 @@ export default function GamePage({
           </p>
         </div>
 
+        {isStardew ? (
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
+              <div className="text-xs font-medium tracking-widest text-cyan-200/70">
+                STARDEW NEXUS
+              </div>
+              <div className="mt-3 text-lg font-semibold text-zinc-50">
+                Core Network Server
+              </div>
+              <p className="mt-2 text-sm leading-6 text-zinc-200/70">
+                The main hub for progression, social loops, and the connected
+                ecosystem layer—where identity and economy feel persistent.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
+              <div className="text-xs font-medium tracking-widest text-fuchsia-200/70">
+                STARDEW GENS
+              </div>
+              <div className="mt-3 text-lg font-semibold text-zinc-50">
+                Generator Progression
+              </div>
+              <p className="mt-2 text-sm leading-6 text-zinc-200/70">
+                The grind-and-upgrade layer—generators, scaling progression, and
+                economy systems tuned for long-term leaderboard competition.
+              </p>
+            </div>
+          </div>
+        ) : null}
+
         <div className="grid gap-4 md:grid-cols-3">
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
             <div className="text-xs font-medium tracking-widest text-cyan-200/70">
@@ -75,7 +104,7 @@ export default function GamePage({
             Back to Games
           </Link>
           <Link
-            href={isStardew ? "/network" : "/network"}
+            href="/network"
             className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-cyan-400 to-indigo-500 px-6 py-3 text-sm font-semibold text-black transition hover:brightness-110"
           >
             {isStardew ? "Enter Stardew Network" : "Explore the Network"}
@@ -85,4 +114,3 @@ export default function GamePage({
     </div>
   );
 }
-

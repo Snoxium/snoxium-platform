@@ -12,7 +12,7 @@ export default function AboutPage() {
             Snoxium Platform
           </h1>
           <p className="max-w-2xl text-sm leading-7 text-zinc-200/70 sm:text-base">
-            Snoxium is an umbrella ecosystem built to connect worlds, games, and
+            Snoxium is an ecosystem built to connect worlds, games and
             communities. It’s not a single title—it’s an identity layer and a
             set of shared systems that make every experience feel like it belongs
             to the same universe.

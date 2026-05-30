@@ -2,6 +2,8 @@ import Link from "next/link";
 import { FeatureCard } from "@/components/site/FeatureCard";
 import { GAMES } from "@/lib/games";
 
+const FEATURED_SLUGS = ["stardew", "lunar-fish", "trash-tycoon"] as const;
+
 export default function Home() {
   return (
     <div className="mx-auto w-full max-w-6xl px-5 py-14 md:py-20">
@@ -145,16 +147,22 @@ export default function Home() {
           </Link>
         </div>
         <div className="grid gap-5 md:grid-cols-3">
-          {GAMES.map((game) => (
-            <FeatureCard
-              key={game.slug}
-              title={game.name}
-              eyebrow={game.status}
-              description={game.description}
-              href={`/games/${game.slug}`}
-              meta={`/games/${game.slug}`}
-            />
-          ))}
+          {FEATURED_SLUGS.map((slug) => {
+            const game = GAMES.find((item) => item.slug === slug);
+            if (!game) {
+              return null;
+            }
+            return (
+              <FeatureCard
+                key={game.slug}
+                title={game.name}
+                eyebrow={game.status}
+                description={game.description}
+                href={`/games/${game.slug}`}
+                meta={`/games/${game.slug}`}
+              />
+            );
+          })}
         </div>
       </section>
 
