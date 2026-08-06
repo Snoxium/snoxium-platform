@@ -3,6 +3,7 @@ import Link from "next/link";
 const NAV_LINKS = [
   { href: "/games", label: "Games" },
   { href: "/network", label: "Network" },
+  { href: "/app/mindmap", label: "Mindmap" },
   { href: "/about", label: "About" },
 ] as const;
 

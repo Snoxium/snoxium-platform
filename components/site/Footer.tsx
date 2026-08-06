@@ -31,6 +31,12 @@ export function Footer() {
               About
             </Link>
             <Link
+              href="/app/mindmap"
+              className="block transition hover:text-zinc-50"
+            >
+              Mindmap
+            </Link>
+            <Link
               href="/privacy"
               className="block transition hover:text-zinc-50"
             >
