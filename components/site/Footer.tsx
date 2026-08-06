@@ -57,8 +57,8 @@ export function Footer() {
             STATUS
           </div>
           <p className="text-sm leading-6 text-zinc-200/70">
-            Build: modern Next.js platform UI. Worlds: Stardew Network, Lunar
-            Fish, Trash Tycoon.
+            Building core platform systems while shipping the first worlds:
+            Stardew Network, Lunar Fish, Trash Tycoon, Runalong.
           </p>
           <p className="text-xs text-zinc-200/50">
             © {new Date().getFullYear()} Snoxium Games. All rights reserved.

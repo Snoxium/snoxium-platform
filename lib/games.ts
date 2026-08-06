@@ -20,11 +20,11 @@ export const GAMES: Game[] = [
   {
     slug: "lunar-fish",
     name: "Lunar Fish",
-    tagline: "Deep waters. High stakes.",
+    tagline: "Minecraft server: sci-fi fishing RPG.",
     description:
-      "A progression loop designed for mastery—unlock gear, discover rare waters, and build a reputation that follows you across Snoxium.",
-    status: "In Development",
-    highlight: "Skill progression and collectibles",
+      "A futuristic Minecraft fishing server with a sci‑fi RPG atmosphere—upgrade gear, unlock new zones, and progress through systems designed to feel persistent and premium.",
+    status: "Minecraft Server",
+    highlight: "Sci‑fi fishing progression",
   },
   {
     slug: "trash-tycoon",

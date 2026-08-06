@@ -1,0 +1,347 @@
+snoxium.com/app/mindmap <-- or something
+Canvas
+Infinite canvas
+Infinite zoom
+Cursor-centered zoom (Figma/Google Maps style)
+Smooth zoom animation
+Smooth panning
+Middle mouse pan
+Space + drag pan
+Touchpad gestures
+Touchscreen support
+Kinetic/inertia scrolling (optional)
+Minimap
+Compass/Home button
+Reset camera
+Zoom slider
+Zoom percentage
+Fit to selection
+Fit to all nodes
+Camera bookmarks
+Multiple view presets
+Grid
+Dot grid
+Snap to grid
+Magnetic alignment guides
+Smart guides
+Rulers
+Infinite background patterns
+Background color/image
+🧠 Nodes
+Unlimited nodes
+Unlimited nesting
+Sub-canvases ("Worlds")
+Multiple root nodes
+Drag & drop
+Resize
+Rotate (optional)
+Lock position
+Lock editing
+Pin node
+Favourite node
+Duplicate
+Clone (linked node)
+Templates
+Node presets
+Bulk editing
+Multi-select
+Rectangle selection
+Lasso selection
+Node grouping
+Frames
+Sections
+Containers
+Swimlanes
+🎨 Node Appearance
+Rounded cards
+Multiple shapes
+Colors
+Gradients
+Borders
+Shadows
+Opacity
+Icons
+Emojis
+Images
+GIFs
+Stickers
+Custom fonts
+Font size
+Rich text
+Markdown
+Code blocks
+Syntax highlighting
+Math (LaTeX)
+Tables
+Quotes
+Callouts
+Progress bars
+Badges
+📝 Content
+
+Each node can contain:
+
+Title
+Subtitle
+Long description
+Markdown notes
+Rich text
+Checklists
+Bullet lists
+Numbered lists
+Links
+Tags
+Priority
+Status
+Due date
+Reminder
+Attachments (references)
+Images
+Embedded diagrams
+Code snippets
+Custom properties
+Metadata
+Comments
+Version notes
+🔗 Connections
+Automatic Bézier curves
+Straight lines
+Orthogonal connectors
+Arrowheads
+Labels
+Colors
+Thickness
+Dashed lines
+Relationship types
+One-way
+Two-way
+Conditional links
+Manual routing
+Auto-routing
+Multiple connections
+Hyperlinks between worlds
+🔍 Search
+Instant search
+Fuzzy search
+Regex search
+Search titles
+Search notes
+Search tags
+Search metadata
+Highlight matches
+Camera jump
+Search history
+Saved searches
+🏷 Organization
+Tags
+Tag colors
+Categories
+Collections
+Folders
+Workspaces
+Worlds
+Hierarchies
+Smart folders
+Recently viewed
+Favourites
+Archive
+Hidden nodes
+Pin important
+Node numbering
+📅 Productivity
+Todo nodes
+Progress tracking
+Percent complete
+Deadlines
+Calendar view
+Timeline view
+Kanban view
+Gantt view
+Habit tracking
+Daily journal
+Weekly review
+Recurring tasks
+📊 Views
+
+Same data, different views:
+
+Mind map
+Tree
+Radial
+Graph
+Timeline
+Kanban
+Calendar
+Table
+Outline
+Gallery
+List
+Dependency graph
+🎯 Inspector
+
+Right sidebar
+
+Properties
+Color
+Font
+Notes
+Tags
+Metadata
+History
+Attachments
+Comments
+Relationships
+⌨ Keyboard
+Ctrl+S
+Ctrl+O
+Ctrl+N
+Ctrl+Z
+Ctrl+Y
+Ctrl+C
+Ctrl+X
+Ctrl+V
+Ctrl+D
+Ctrl+F
+Ctrl+G
+Delete
+Tab
+Shift+Tab
+Enter
+Shift+Enter
+Arrow navigation
+Space pan
+Custom shortcuts
+📁 Saving
+Autosave
+Manual save
+JSON export
+JSON import
+Backup snapshots
+Restore snapshots
+Auto recovery
+Export settings
+Project settings
+📤 Export
+PNG
+SVG
+PDF
+Markdown
+Plain text
+HTML
+OPML
+JSON
+CSV
+Print layout
+🎨 Themes
+Dark
+Light
+AMOLED
+Custom themes
+Accent colours
+Custom backgrounds
+Background images
+Animated backgrounds (optional)
+⚡ Performance
+60+ FPS
+100k nodes target
+Virtual rendering
+GPU-accelerated canvas
+Incremental redraw
+Efficient hit-testing
+Background autosave
+Memory optimization
+🤖 Smart Features
+Auto-layout
+Tree balancing
+Collision avoidance
+Smart alignment
+Auto-coloring
+Duplicate detection
+Broken link detection
+Statistics
+Heat map
+Dependency analysis
+📈 Statistics
+Total nodes
+Total words
+Completed tasks
+Open tasks
+Tags used
+Largest branch
+Most connected node
+Last edited
+Time spent
+Graph density
+🛠 Utilities
+Command palette (Ctrl+P)
+Quick actions
+Recent files
+Favorites
+Templates
+Plugin system (future)
+Settings
+Keyboard shortcut editor
+Backup manager
+Restore manager
+🔐 Privacy
+100% offline
+No telemetry
+No login
+No cloud dependency
+Optional password protection for exported project files
+Local encryption for saved JSON exports (optional)
+🌟 Features I'd Add That Most Apps Don't Have
+🌍 Worlds
+
+Any node can open its own infinite canvas, letting you create deeply nested workspaces instead of one overwhelming map.
+
+🔄 Linked Nodes
+
+A node can appear in multiple places while sharing the same underlying data. Edit it once, and every instance updates automatically.
+
+📌 Portals
+
+Create links that instantly jump between unrelated branches or worlds without duplicating information.
+
+🧩 Node Types
+
+Instead of every node being just text, choose specialized nodes such as:
+
+Rich text document
+Checklist
+Kanban board
+Spreadsheet
+Calendar
+Whiteboard
+Drawing canvas
+Code editor
+Bookmark collection
+Image gallery
+Database table
+Timer
+Calculator
+🧬 Templates
+
+Save any node or entire branch as a reusable template (e.g. "Project", "Meeting Notes", "Game Idea", "Recipe", "Character Sheet").
+
+📜 Time Travel
+
+Browse the complete edit history with a timeline and restore any previous state of the project or an individual node.
+
+🎥 Presentation Mode
+
+Turn any branch into a slideshow that smoothly flies between nodes for presentations or planning sessions.
+
+🗺 Atlas
+
+A global navigation panel showing every world and allowing instant jumps between them.
+
+📚 Knowledge Graph
+
+A separate graph view that visualizes all cross-links between nodes, making hidden relationships easy to discover.
+
+🎮 Game-Style Navigation
+
+Optional WASD movement, smooth camera animations, and configurable controls for users who prefer a more immersive way to navigate large canvases.
+
+If we build this, my goal would be for it to feel less like a traditional mind-mapping app and more like a personal operating system for organizing knowledge, projects, ideas, and your entire digital life.

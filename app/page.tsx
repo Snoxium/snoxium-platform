@@ -16,13 +16,17 @@ export default function Home() {
           <div className="space-y-7">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/30 px-4 py-2 text-xs font-medium tracking-widest text-zinc-200/80">
               <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_18px_rgba(34,211,238,0.65)]" />
-              CONNECTED ECOSYSTEM
+              PLATFORM STUDIO
             </div>
             <h1 className="text-5xl font-semibold tracking-tight text-zinc-50 sm:text-6xl md:text-7xl">
               Snoxium
             </h1>
             <p className="max-w-xl text-lg leading-8 text-zinc-200/75 sm:text-xl">
               Connected worlds, games, and experiences.
+            </p>
+            <p className="max-w-xl text-sm leading-7 text-zinc-200/65 sm:text-base">
+              A low‑key tech-first platform built to ship game worlds with shared
+              identity, progression, and network systems from day one.
             </p>
             <div className="flex flex-col gap-3 sm:flex-row">
               <Link
