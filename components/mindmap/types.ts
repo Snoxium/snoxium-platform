@@ -164,7 +164,7 @@ export interface MMProject {
   edges: Record<string, MMEdge>;
   tags: Record<string, MMTag>;
   bookmarks: MMCameraBookmark[];
-  history: Array<{ id: string; at: number; kind: string }>;
+  history: Array<{ id: string; at: number; kind: string; targetId: string }>;
   settings: MMSettings;
 }
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { actions, useStore } from "./store";
+import type { MMProject } from "./types";
 import { searchInProject } from "./engine";
 
 export function SearchModal() {
@@ -372,7 +373,7 @@ function TreeWorld({
   editing,
   setEditing,
 }: {
-  project: ReturnType<typeof useStore<any>>["project"];
+  project: MMProject;
   worldId: string;
   depth: number;
   editing: string | null;

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { actions, useStore } from "./store";
-import type { MMNode, NodeKind, NodeStatus } from "./types";
+import type { MMNode, NodeKind, NodeStatus, MMProject } from "./types";
 import { PALETTE, colorForString, projectStats, uid } from "./engine";
 import { download, exportSVG, toCSV, toMarkdown, toOPML, toPlainText, exportPNG } from "./exporters";
 
@@ -873,8 +873,8 @@ function ChecklistEditor({
   );
 }
 
-function PortalPicker({ nodeId, project }: { nodeId: string; project: ReturnType<typeof useStore<any>>["project"] }) {
-  const candidates = Object.values(project.nodes).filter(
+function PortalPicker({ nodeId, project }: { nodeId: string; project: MMProject }) {
+  const candidates = (Object.values(project.nodes) as MMNode[]).filter(
     (n) => n.worldId === project.currentWorldId && n.id !== nodeId,
   );
   return (

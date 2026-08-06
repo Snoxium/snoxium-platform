@@ -14,7 +14,7 @@ import type {
   MMCameraBookmark,
 } from "./types";
 import { DEFAULT_SETTINGS } from "./types";
-import { uid, colorForString } from "./engine";
+import { uid, clamp, colorForString } from "./engine";
 import { useSyncExternalStore } from "react";
 
 const STORAGE_KEY = "snoxium.mindmap.v1";
@@ -226,7 +226,7 @@ export function ensureTag(project: MMProject, name: string): MMTag {
 }
 
 function pushHistory(project: MMProject, kind: string, id: string) {
-  project.history.push({ id: uid(), at: Date.now(), kind, id });
+  project.history.push({ id: uid(), at: Date.now(), kind, targetId: id });
   if (project.history.length > MAX_HISTORY) {
     project.history.splice(0, project.history.length - MAX_HISTORY);
   }

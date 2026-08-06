@@ -1,12 +1,6 @@
-"use client";
-
-import { Metadata } from "next";
 import Link from "next/link";
-import { Suspense, lazy } from "react";
-
-const MindMapApp = lazy(() =>
-  import("@/components/mindmap/MindMapApp").then((m) => ({ default: m.MindMapApp })),
-);
+import type { Metadata } from "next";
+import { MindMapPageShell } from "@/components/mindmap/MindMapPageShell";
 
 export const metadata: Metadata = {
   title: "Mindmap",
@@ -39,13 +33,7 @@ export default function MindMapPage() {
           </Link>
         </div>
       </div>
-      <Suspense fallback={
-        <div className="mx-auto flex h-[80vh] items-center justify-center text-zinc-400">
-          Loading mindmap engine…
-        </div>
-      }>
-        <MindMapApp />
-      </Suspense>
+      <MindMapPageShell />
     </div>
   );
 }

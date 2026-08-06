@@ -144,7 +144,7 @@ export function toOPML(p: MMProject): string {
           .join("")
       : "") +
     `</outline>`;
-  const world = (w: MMWorld) =>
+  const world = (w: MMWorld): string =>
     `<outline text="${tag(w.name)}" _worldId="${w.id}">` +
     Object.values(p.nodes)
       .filter((n) => n.worldId === w.id)
