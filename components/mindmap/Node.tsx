@@ -146,13 +146,19 @@ export const NodeView = memo(function NodeView({
       }}
       data-node-id={node.id}
       onPointerDown={(e) => {
-        // Keep node-drag working, but don't steal events from inputs/buttons
+        // Keep node-drag working, but don't steal events from inputs/buttons/labels
         const tgt = e.target as HTMLElement;
         if (
           tgt.tagName === "INPUT" ||
           tgt.tagName === "TEXTAREA" ||
           tgt.tagName === "BUTTON" ||
+          tgt.tagName === "SELECT" ||
+          tgt.tagName === "OPTION" ||
+          tgt.tagName === "LABEL" ||
+          tgt.tagName === "A" ||
           tgt.closest("button") ||
+          tgt.closest("label") ||
+          tgt.closest("a") ||
           tgt.hasAttribute("data-port") ||
           tgt.hasAttribute("data-resize")
         ) {
@@ -220,10 +226,6 @@ export const NodeView = memo(function NodeView({
               <div
                 className="truncate text-[15px] font-semibold leading-snug"
                 style={{ color: text }}
-                onPointerDown={(e) => {
-                  // Allow dragging via title, but don't enter edit mode on first click
-                  e.stopPropagation();
-                }}
                 onDoubleClick={(e) => {
                   e.stopPropagation();
                   e.preventDefault();
@@ -367,7 +369,7 @@ export const NodeView = memo(function NodeView({
             e.stopPropagation();
             if (node.childWorldId) actions.enterWorld(node.childWorldId);
           }}
-          title="Enter this world (double-click node also works)"
+          title="Enter this world"
         >
           Enter ↗
         </button>

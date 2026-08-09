@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { beginUndoGroup, endUndoGroup, setViewportSize, actions, useStore } from "./store";
+import { beginUndoGroup, endUndoGroup, setViewportSize, actions, useStore, getState } from "./store";
 import type { MMNode } from "./types";
 import { NodeView } from "./Node";
 import { EdgesLayer } from "./Edges";
@@ -129,31 +129,32 @@ export function Canvas() {
     };
   }, [camera.zoom, settings.wasdEnabled, moveCameraBy]);
 
-  const onWheel = useCallback(
-    (e: React.WheelEvent) => {
-      const el = containerRef.current;
-      if (!el) return;
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
       const rect = el.getBoundingClientRect();
       const sx = e.clientX - rect.left;
       const sy = e.clientY - rect.top;
-
       if (e.shiftKey) {
         e.preventDefault();
         const dx = Math.abs(e.deltaX) > 1 ? e.deltaX : e.deltaY;
         actions.nudgeCamera(-dx, -e.deltaY);
         return;
       }
-
-      // Default: scroll = zoom at cursor (no Ctrl required)
       e.preventDefault();
       const factor = Math.exp(-e.deltaY * 0.0015);
-      actions.zoomAt(sx, sy, camera.zoom * factor, {
+      const curCam = getState().camera;
+      actions.zoomAt(sx, sy, curCam.zoom * factor, {
         w: rect.width,
         h: rect.height,
       });
-    },
-    [camera.zoom],
-  );
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      el.removeEventListener("wheel", onWheel);
+    };
+  }, []);
 
   const snap = (v: number) =>
     settings.snapToGrid ? Math.round(v / settings.gridSize) * settings.gridSize : v;
@@ -421,22 +422,6 @@ export function Canvas() {
         actions.createEdgeFromTo(st.connectingFrom, toId);
       }
       actions.setTempEdge(undefined);
-    } else if (st.mode === "nodes" && !st.moved && st.nodeId) {
-      const n = project.nodes[st.nodeId];
-      if (n?.isWorld && n.childWorldId) {
-        actions.enterWorld(n.childWorldId);
-        st.mode = null;
-        st.moved = false;
-        dragState.current.mode = null;
-        return;
-      }
-      if (n?.isPortal && n.portalTarget) {
-        actions.jumpToNode(n.portalTarget);
-        st.mode = null;
-        st.moved = false;
-        dragState.current.mode = null;
-        return;
-      }
     }
 
     if (st.mode === "marquee") {
@@ -513,14 +498,6 @@ export function Canvas() {
     const target = e.target as HTMLElement;
     const nodeEl = target.closest?.("[data-node-id]") as HTMLElement | null;
     if (nodeEl) {
-      const id = nodeEl.getAttribute("data-node-id");
-      if (id) {
-        const n = project.nodes[id];
-        if (n?.isWorld && n.childWorldId) {
-          actions.enterWorld(n.childWorldId);
-          return;
-        }
-      }
       return;
     }
     const el = containerRef.current;
@@ -558,8 +535,7 @@ export function Canvas() {
       ref={containerRef}
       data-mindmap-canvas
       className="relative h-full w-full overflow-hidden rounded-2xl border border-white/5 bg-[#06060d]"
-      style={gridBgStyle}
-      onWheel={onWheel}
+      style={{ ...gridBgStyle, touchAction: "none", overscrollBehavior: "contain" }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
