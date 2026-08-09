@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { actions, useStore } from "./store";
+import { actions, useStore, viewportSizeRef } from "./store";
 import type { MMProject } from "./types";
 import { searchInProject } from "./engine";
 
@@ -218,25 +218,12 @@ export function Minimap() {
   const project = useStore((s) => s.project);
   const camera = useStore((s) => s.camera);
   const settings = project.settings;
-  const viewportSize = { w: 800, h: 600 };
-  const minimapEl = document.querySelector("div[data-node-minimap]") as HTMLDivElement | null;
-  const viewport = minimapEl?.getBoundingClientRect();
-  const mw = viewport?.width ?? 200;
-  const mh = viewport?.height ?? 180;
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const drag = useRef<null | { lastX: number; lastY: number }>(null);
 
-  const nodes = useMemo(
-    () => Object.values(project.nodes).filter((n) => n.worldId === project.currentWorldId),
-    [project.nodes, project.currentWorldId],
-  );
   if (!settings.minimapEnabled) return null;
-  if (!nodes.length) {
-    return (
-      <div
-        data-node-minimap
-        className="absolute bottom-4 right-4 h-[180px] w-[220px] overflow-hidden rounded-xl border border-white/10 bg-black/50 backdrop-blur"
-      />
-    );
-  }
+  const nodes = Object.values(project.nodes).filter((n) => n.worldId === project.currentWorldId);
+
   let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
   for (const n of nodes) {
     x1 = Math.min(x1, n.x);
@@ -245,43 +232,117 @@ export function Minimap() {
     y2 = Math.max(y2, n.y + n.h);
   }
   const pad = 80;
-  x1 -= pad; y1 -= pad; x2 += pad; y2 += pad;
+  if (isFinite(x1)) {
+    x1 -= pad; y1 -= pad; x2 += pad; y2 += pad;
+  } else {
+    x1 = -400; y1 = -300; x2 = 400; y2 = 300;
+  }
   const mapW = x2 - x1;
   const mapH = y2 - y1;
-  const sx = mw / mapW;
-  const sy = mh / mapH;
-  const sc = Math.min(sx, sy);
-  const offX = (mw - mapW * sc) / 2;
-  const offY = (mh - mapH * sc) / 2;
 
-  const vw = (viewportSize.w ? viewportSize.w : 800) / camera.zoom;
-  const vh = (viewportSize.h ? viewportSize.h : 600) / camera.zoom;
-  const vx = (-camera.x) / camera.zoom;
-  const vy = (-camera.y) / camera.zoom;
+  const readDims = () => {
+    const el = containerRef.current;
+    const mw = el?.clientWidth ?? 200;
+    const mh = el?.clientHeight ?? 180;
+    const sc = Math.min(mw / mapW, mh / mapH);
+    const offX = (mw - mapW * sc) / 2;
+    const offY = (mh - mapH * sc) / 2;
+    return { mw, mh, sc, offX, offY };
+  };
 
-  const worldToMini = (x: number, y: number) => ({
-    x: (x - x1) * sc + offX,
-    y: (y - y1) * sc + offY,
-  });
+  const worldToMini = (wx: number, wy: number) => {
+    const { sc, offX, offY } = readDims();
+    return {
+      x: offX + (wx - x1) * sc,
+      y: offY + (wy - y1) * sc,
+      sc,
+    };
+  };
+
+  const miniToWorld = (mx: number, my: number) => {
+    const { sc, offX, offY } = readDims();
+    return {
+      wx: (mx - offX) / sc + x1,
+      wy: (my - offY) / sc + y1,
+      sc,
+    };
+  };
+
+  const vw = viewportSizeRef.current.w / Math.max(0.01, camera.zoom);
+  const vh = viewportSizeRef.current.h / Math.max(0.01, camera.zoom);
+  const vx = -camera.x / Math.max(0.01, camera.zoom);
+  const vy = -camera.y / Math.max(0.01, camera.zoom);
+  const { sc } = worldToMini(0, 0);
+
+  const centerOn = (mx: number, my: number) => {
+    const { wx, wy } = miniToWorld(mx, my);
+    const vwActual = viewportSizeRef.current.w / Math.max(0.01, camera.zoom);
+    const vhActual = viewportSizeRef.current.h / Math.max(0.01, camera.zoom);
+    const camX = -(wx - vwActual / 2) * camera.zoom;
+    const camY = -(wy - vhActual / 2) * camera.zoom;
+    actions.setCamera(camX, camY, camera.zoom);
+  };
+
+  if (!nodes.length) {
+    return (
+      <div
+        ref={containerRef}
+        data-node-minimap
+        className="absolute bottom-4 right-4 h-[180px] w-[220px] overflow-hidden rounded-xl border border-white/10 bg-black/50 backdrop-blur"
+      />
+    );
+  }
 
   return (
     <div
+      ref={containerRef}
       data-node-minimap
-      className="absolute bottom-4 right-4 h-[180px] w-[220px] cursor-crosshair overflow-hidden rounded-xl border border-white/10 bg-black/50 p-1 backdrop-blur"
-      onClick={(e) => {
-        const r = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-        const mx = e.clientX - r.left;
-        const my = e.clientY - r.top;
-        const wx = (mx - offX) / sc + x1;
-        const wy = (my - offY) / sc + y1;
-        const vwActual = 1000 / camera.zoom;
-        const vhActual = 600 / camera.zoom;
-        const camX = -(wx - vwActual / 2) * camera.zoom;
-        const camY = -(wy - vhActual / 2) * camera.zoom;
-        actions.setCamera(camX, camY, camera.zoom);
+      className="absolute bottom-4 right-4 h-[180px] w-[220px] select-none overflow-hidden rounded-xl border border-white/10 bg-black/50 p-1 backdrop-blur"
+      style={{ touchAction: "none" }}
+      onPointerDown={(e) => {
+        const el = containerRef.current;
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        drag.current = { lastX: mx, lastY: my };
+        const vp = worldToMini(vx, vy);
+        const vpW = vw * sc;
+        const vpH = vh * sc;
+        const insideBox =
+          mx >= vp.x - 2 && mx <= vp.x + vpW + 2 && my >= vp.y - 2 && my <= vp.y + vpH + 2;
+        if (!insideBox) centerOn(mx, my);
+        try { el.setPointerCapture(e.pointerId); } catch {}
+        e.preventDefault();
+      }}
+      onPointerMove={(e) => {
+        if (!drag.current) return;
+        const el = containerRef.current;
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        const dmx = mx - drag.current.lastX;
+        const dmy = my - drag.current.lastY;
+        drag.current = { lastX: mx, lastY: my };
+        const wx = -dmx / Math.max(0.0001, sc);
+        const wy = -dmy / Math.max(0.0001, sc);
+        actions.nudgeCamera(wx * camera.zoom, wy * camera.zoom);
+      }}
+      onPointerUp={(e) => {
+        drag.current = null;
+        try {
+          containerRef.current?.releasePointerCapture(e.pointerId);
+        } catch {}
+      }}
+      onPointerCancel={(e) => {
+        drag.current = null;
+        try {
+          containerRef.current?.releasePointerCapture(e.pointerId);
+        } catch {}
       }}
     >
-      <svg width="100%" height="100%" className="overflow-visible">
+      <svg width="100%" height="100%" className="overflow-visible pointer-events-none">
         {nodes.map((n) => {
           const p = worldToMini(n.x, n.y);
           return (
@@ -302,7 +363,7 @@ export function Minimap() {
           y={worldToMini(vx, vy).y}
           width={Math.max(2, vw * sc)}
           height={Math.max(2, vh * sc)}
-          fill="none"
+          fill="rgba(34,211,238,0.08)"
           stroke="#22d3ee"
           strokeWidth={1.5}
           strokeDasharray="3 2"

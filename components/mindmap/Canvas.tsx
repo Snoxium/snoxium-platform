@@ -106,10 +106,10 @@ export function Canvas() {
       const speed = 10 / Math.max(0.2, camera.zoom);
       let dx = 0,
         dy = 0;
-      if (keys2.current["w"] || keys2.current["arrowup"]) dy -= speed;
-      if (keys2.current["s"] || keys2.current["arrowdown"]) dy += speed;
-      if (keys2.current["a"] || keys2.current["arrowleft"]) dx -= speed;
-      if (keys2.current["d"] || keys2.current["arrowright"]) dx += speed;
+      if (keys2.current["w"] || keys2.current["arrowup"]) dy += speed;
+      if (keys2.current["s"] || keys2.current["arrowdown"]) dy -= speed;
+      if (keys2.current["a"] || keys2.current["arrowleft"]) dx += speed;
+      if (keys2.current["d"] || keys2.current["arrowright"]) dx -= speed;
       if (dx || dy) moveCameraBy(dx, dy);
       raf = requestAnimationFrame(tick);
     };

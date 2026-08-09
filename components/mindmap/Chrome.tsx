@@ -15,10 +15,9 @@ export function Toolbar() {
   const parentWorld = world?.parentWorldId
     ? project.worlds[world.parentWorldId]
     : undefined;
-  const [menu, setMenu] = useState<string | null>(null);
 
   return (
-    <div className="relative z-30 flex flex-col gap-2">
+    <div className="relative z-50 flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-black/30 p-2 backdrop-blur">
         <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/[0.04] px-2 py-1">
           <span className="text-lg">{world?.emoji ?? "🌐"}</span>
@@ -193,16 +192,9 @@ function AddMenu({ onPick }: { onPick: (k: NodeKind) => void }) {
     { kind: "document", label: "Rich Doc", icon: "📄" },
     { kind: "checklist", label: "Checklist", icon: "☑️" },
     { kind: "kanban", label: "Kanban Board", icon: "🗂" },
-    { kind: "spreadsheet", label: "Spreadsheet", icon: "📊" },
     { kind: "calendar", label: "Calendar", icon: "📅" },
-    { kind: "whiteboard", label: "Whiteboard", icon: "🎨" },
-    { kind: "code", label: "Code Editor", icon: "⟨/⟩" },
-    { kind: "bookmarks", label: "Bookmarks", icon: "🔖" },
-    { kind: "gallery", label: "Image Gallery", icon: "🖼" },
-    { kind: "database", label: "Database Table", icon: "🗄" },
-    { kind: "timer", label: "Timer", icon: "⏱" },
-    { kind: "calculator", label: "Calculator", icon: "🧮" },
-    { kind: "world", label: "Sub-World (canvas)", icon: "🌐" },
+    { kind: "code", label: "Code Snippet", icon: "⟨/⟩" },
+    { kind: "world", label: "Sub-World", icon: "🌐" },
   ];
   return (
     <div className="relative">
@@ -263,7 +255,6 @@ function SettingsMenu() {
             </Section>
             <SwitchRow label="Grid" on={s.gridEnabled} onChange={(v) => toggle({ gridEnabled: v })} />
             <SwitchRow label="Snap to grid" on={s.snapToGrid} onChange={(v) => toggle({ snapToGrid: v })} />
-            <SwitchRow label="Smart guides" on={s.smartGuides} onChange={(v) => toggle({ smartGuides: v })} />
             <SwitchRow label="Rulers" on={s.rulersEnabled} onChange={(v) => toggle({ rulersEnabled: v })} />
             <SwitchRow label="Minimap" on={s.minimapEnabled} onChange={(v) => toggle({ minimapEnabled: v })} />
             <SwitchRow label="WASD movement" on={s.wasdEnabled} onChange={(v) => toggle({ wasdEnabled: v })} />
@@ -423,8 +414,6 @@ function ExportMenu() {
               ["md", "Markdown (.md)"],
               ["txt", "Plain text (.txt)"],
               ["csv", "CSV (.csv)"],
-              ["opml", "OPML (.opml)"],
-              ["html", "HTML (.html)"],
               ["svg", "SVG image (.svg)"],
               ["png", "PNG image (.png)"],
             ].map(([k, label]) => (
@@ -449,6 +438,7 @@ function escapeHtml(s: string): string {
 
 function ImportBtn() {
   const inputRef = useRef<HTMLInputElement>(null);
+  const [ok, setOk] = useState(false);
   return (
     <>
       <input
@@ -1056,7 +1046,7 @@ function PortalPicker({ nodeId, project }: { nodeId: string; project: MMProject 
   return (
     <div className="space-y-1.5">
       <select
-        value={""}
+        value={project.nodes[nodeId]?.portalTarget ?? ""}
         onChange={(e) => e.target.value && actions.setPortalTo(nodeId, e.target.value)}
         className="input"
       >
