@@ -369,20 +369,30 @@ function setPartial(partial: Partial<StoreShape>) {
   emit();
 }
 
+const snapshotCache = new WeakMap<
+  (s: StoreShape) => any,
+  { at: number; value: unknown; box: { value: unknown } }
+>();
+
+function read<T>(sel: (s: StoreShape) => T): { value: T } {
+  (store as any).version = version;
+  let entry = snapshotCache.get(sel);
+  if (entry && entry.at === version) {
+    return entry.box as { value: T };
+  }
+  const value = sel(store);
+  const box = { value };
+  snapshotCache.set(sel, { at: version, value, box });
+  return box;
+}
+
 export function useSnapshot<T>(sel: (s: StoreShape) => T): T {
-  return useSyncExternalStore(
+  const snap = useSyncExternalStore(
     subscribe,
-    () => {
-      bump();
-      const s = store;
-      (s as any).version = version;
-      return sel(s);
-    },
-    () => {
-      const s = store;
-      return sel(s);
-    },
+    () => read(sel),
+    () => read(sel),
   );
+  return snap.value;
 }
 
 export function useStore<T>(sel: (s: StoreShape) => T): T {
