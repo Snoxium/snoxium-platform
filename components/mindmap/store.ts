@@ -301,7 +301,6 @@ const store: StoreShape = {
 
 function bump() {
   version++;
-  (store as any).version = version;
 }
 
 const undoStack: string[] = [];
@@ -375,7 +374,6 @@ const snapshotCache = new WeakMap<
 >();
 
 function read<T>(sel: (s: StoreShape) => T): { value: T } {
-  (store as any).version = version;
   let entry = snapshotCache.get(sel);
   if (entry && entry.at === version) {
     return entry.box as { value: T };
