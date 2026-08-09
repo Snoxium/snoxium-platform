@@ -18,7 +18,7 @@ export function Toolbar() {
   const [menu, setMenu] = useState<string | null>(null);
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="relative z-30 flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-black/30 p-2 backdrop-blur">
         <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/[0.04] px-2 py-1">
           <span className="text-lg">{world?.emoji ?? "🌐"}</span>

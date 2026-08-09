@@ -509,7 +509,6 @@ export const actions = {
         ...store.ui,
         selectedNodeIds: next,
         selectedEdgeIds: [],
-        inspectorOpen: next.length > 0 ? true : store.ui.inspectorOpen,
       },
     });
   },

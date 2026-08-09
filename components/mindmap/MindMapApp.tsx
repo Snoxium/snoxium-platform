@@ -30,21 +30,25 @@ export function MindMapApp() {
   return (
     <div className="relative flex h-[calc(100vh-120px)] min-h-[720px] w-full flex-col gap-3 px-5 py-4 md:px-8 md:py-6">
       <Toolbar />
-      <div className="grid min-h-0 flex-1 gap-3 md:grid-cols-[auto,1fr,auto]">
-        {ui.atlasOpen && (
-          <div className="min-h-0 w-60 min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/30">
-            <Atlas />
-          </div>
-        )}
-        <div className="relative min-h-0 min-w-0">
+      <div className="relative min-h-0 flex-1">
+        <div className="relative h-full w-full min-h-0 min-w-0">
           <Canvas />
           <Minimap />
           <Presentation />
           <FloatingHelp />
         </div>
+        {ui.atlasOpen && (
+          <div className="pointer-events-none absolute inset-y-0 left-0 z-20 flex w-64 items-stretch p-0 pr-3">
+            <div className="pointer-events-auto h-full w-full min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/60 backdrop-blur-md shadow-2xl">
+              <Atlas />
+            </div>
+          </div>
+        )}
         {ui.inspectorOpen && (
-          <div className="min-h-0 w-80 min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/30 backdrop-blur">
-            <Inspector />
+          <div className="pointer-events-none absolute inset-y-0 right-0 z-20 flex w-80 items-stretch p-0 pl-3">
+            <div className="pointer-events-auto h-full w-full min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/60 backdrop-blur-md shadow-2xl">
+              <Inspector />
+            </div>
           </div>
         )}
       </div>
