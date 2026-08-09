@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { beginUndoGroup, endUndoGroup, setViewportSize, actions, useStore, getState, bumpVersion, bumpSilent, flushNotify, touchNode } from "./store";
+import { beginUndoGroup, endUndoGroup, setViewportSize, actions, useStore, getState, bumpVersion, bumpSilent, flushNotify } from "./store";
 import type { MMNode } from "./types";
 import { NodeView } from "./Node";
 import { EdgesLayer } from "./Edges";
@@ -136,9 +136,15 @@ export function Canvas() {
     };
     raf = requestAnimationFrame(tick);
     const d = (e: KeyboardEvent) => {
+      const tgt = e.target as HTMLElement;
+      const tag = tgt?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tgt?.isContentEditable) return;
       keys2.current[e.key.toLowerCase()] = true;
     };
     const u = (e: KeyboardEvent) => {
+      const tgt = e.target as HTMLElement;
+      const tag = tgt?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tgt?.isContentEditable) return;
       keys2.current[e.key.toLowerCase()] = false;
     };
     window.addEventListener("keydown", d);
@@ -344,7 +350,7 @@ export function Canvas() {
     const wp = screenToWorld(sx, sy, camera.x, camera.y, camera.zoom);
 
     if (st.mode === "pan") {
-      actions.nudgeCamera(-dx, -dy);
+      actions.nudgeCamera(dx, dy);
       return;
     }
     if (st.mode === "connect" && st.connectingFrom) {
@@ -374,25 +380,27 @@ export function Canvas() {
           const wdx = (ssx - sst.startX) / camera.zoom;
           const wdy = (ssy - sst.startY) / camera.zoom;
           let any = false;
+          const latestNodes = getState().project.nodes;
           for (const [id, orig] of sst.origPos) {
-            const n = project.nodes[id];
+            const n = latestNodes[id];
             if (!n || n.locked) continue;
             const nx = snap(orig.x + wdx);
             const ny = snap(orig.y + wdy);
             if (n.x !== nx || n.y !== ny) {
               n.x = nx;
               n.y = ny;
-              touchNode(n);
+              n.updated = Date.now();
               any = true;
             }
           }
           if (any) {
-            bumpVersion();
+            bumpSilent();
+            setVersion((v) => v + 1);
           }
         } else if (sst.mode === "resize" && sst.nodeId && sst.origSize) {
           const wdx = (ssx - sst.startX) / camera.zoom;
           const wdy = (ssy - sst.startY) / camera.zoom;
-          const n = project.nodes[sst.nodeId];
+          const n = getState().project.nodes[sst.nodeId];
           if (!n || n.locked) return;
           const { x: ox, y: oy, w: ow, h: oh } = sst.origSize;
           const handle = sst.resizeHandle ?? "se";
@@ -422,8 +430,9 @@ export function Canvas() {
             n.y = ny;
             n.w = nw;
             n.h = nh;
-            touchNode(n);
-            bumpVersion();
+            n.updated = Date.now();
+            bumpSilent();
+            setVersion((v) => v + 1);
           }
         } else if (sst.mode === "marquee") {
           const gstate = getState();
@@ -511,7 +520,7 @@ export function Canvas() {
           inertiaRef.current = null;
           return;
         }
-        actions.nudgeCamera(-st.vx, -st.vy);
+        actions.nudgeCamera(st.vx, st.vy);
         st.vx *= 0.93;
         st.vy *= 0.93;
         inertiaRef.current = requestAnimationFrame(doInertia);

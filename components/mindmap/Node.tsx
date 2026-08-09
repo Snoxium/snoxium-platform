@@ -336,26 +336,22 @@ const _NodeView = function NodeView({
             style={{ background: stroke }}
             data-port="top"
             title="Link from top"
-            onPointerDown={(e) => e.stopPropagation()}
           />
           <div
             className="absolute right-0 top-1/2 h-3 w-3 translate-x-1/2 -translate-y-1/2 cursor-crosshair rounded-full border border-white/50"
             style={{ background: stroke }}
             data-port="right"
             title="Drag to connect"
-            onPointerDown={(e) => e.stopPropagation()}
           />
           <div
             className="absolute bottom-0 left-1/2 h-3 w-3 -translate-x-1/2 translate-y-1/2 cursor-crosshair rounded-full border border-white/50"
             style={{ background: stroke }}
             data-port="bottom"
-            onPointerDown={(e) => e.stopPropagation()}
           />
           <div
             className="absolute left-0 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 cursor-crosshair rounded-full border border-white/50"
             style={{ background: stroke }}
             data-port="left"
-            onPointerDown={(e) => e.stopPropagation()}
           />
         </>
       )}
@@ -365,7 +361,6 @@ const _NodeView = function NodeView({
           className="absolute -bottom-1 -right-1 h-4 w-4 cursor-nwse-resize rounded-full border-2 border-cyan-300 bg-black"
           title="Drag to resize"
           data-resize="se"
-          onPointerDown={(e) => e.stopPropagation()}
         />
       )}
 
