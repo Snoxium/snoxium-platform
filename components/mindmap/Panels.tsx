@@ -434,9 +434,10 @@ function TreeWorld({
 
 export function Presentation() {
   const ui = useStore((s) => s.ui);
+  const project = useStore((s) => s.project);
   if (!ui.presentation.active) return null;
   const cur = ui.presentation.nodeIds[ui.presentation.index];
-  const name = cur ? useStore((s) => s.project.nodes[cur]?.title ?? "") : "";
+  const name = cur ? project.nodes[cur]?.title ?? "" : "";
   return (
     <div className="pointer-events-none fixed bottom-4 left-1/2 z-30 -translate-x-1/2 rounded-2xl border border-white/10 bg-black/60 px-4 py-2 text-xs text-zinc-200 backdrop-blur">
       <button
