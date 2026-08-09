@@ -83,20 +83,20 @@ const _NodeView = function NodeView({
   const fill =
     node.color?.fill ??
     (node.kind === "world"
-      ? "#a78bfa18"
+      ? "#a78bfa22"
       : node.kind === "checklist"
-        ? "#f472b618"
+        ? "#f472b622"
         : node.status === "done"
-          ? "#34d39914"
-          : "rgba(255,255,255,0.04)");
+          ? "#34d39922"
+          : "var(--mm-node-fill)");
   const stroke =
     node.color?.stroke ??
     (selected
-      ? "#22d3ee"
+      ? "var(--mm-node-selected)"
       : hovered
-        ? "rgba(255,255,255,0.22)"
-        : "rgba(255,255,255,0.1)");
-  const text = node.color?.text ?? "#e4e4e7";
+        ? "var(--mm-node-hover)"
+        : "var(--mm-node-stroke)");
+  const text = node.color?.text ?? "var(--mm-node-text)";
   const opacity = node.opacity ?? 1;
 
   const saveTitle = () => {
@@ -221,24 +221,22 @@ const _NodeView = function NodeView({
               <div
                 className="truncate text-[15px] font-semibold leading-snug"
                 style={{ color: text }}
-                onPointerDown={(e) => {
-                  e.stopPropagation();
-                }}
                 onClick={(e) => {
-                  e.stopPropagation();
                   if (node.isWorld && node.childWorldId && e.detail === 1) {
+                    e.stopPropagation();
                     actions.enterWorld(node.childWorldId);
                     return;
                   }
                 }}
                 onDoubleClick={(e) => {
-                  e.stopPropagation();
                   e.preventDefault();
                   if (node.isWorld && node.childWorldId) {
+                    e.stopPropagation();
                     actions.enterWorld(node.childWorldId);
                     return;
                   }
                   if (node.editLocked || node.locked) return;
+                  e.stopPropagation();
                   setDraft(node.title);
                   setEditingTitle(true);
                 }}

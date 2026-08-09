@@ -288,7 +288,11 @@ export function Minimap() {
       <div
         ref={containerRef}
         data-node-minimap
-        className="absolute bottom-4 right-4 h-[180px] w-[220px] overflow-hidden rounded-xl border border-white/10 bg-black/50 backdrop-blur"
+        className="absolute bottom-4 right-4 h-[180px] w-[220px] overflow-hidden rounded-xl p-1 backdrop-blur"
+        style={{
+          background: "var(--mm-minimap-bg)",
+          border: "1px solid var(--mm-panel-border)",
+        }}
       />
     );
   }
@@ -297,8 +301,12 @@ export function Minimap() {
     <div
       ref={containerRef}
       data-node-minimap
-      className="absolute bottom-4 right-4 h-[180px] w-[220px] select-none overflow-hidden rounded-xl border border-white/10 bg-black/50 p-1 backdrop-blur"
-      style={{ touchAction: "none" }}
+      className="absolute bottom-4 right-4 h-[180px] w-[220px] select-none overflow-hidden rounded-xl p-1 backdrop-blur"
+      style={{
+        touchAction: "none",
+        background: "var(--mm-minimap-bg)",
+        border: "1px solid var(--mm-panel-border)",
+      }}
       onPointerDown={(e) => {
         const el = containerRef.current;
         if (!el) return;
@@ -353,7 +361,7 @@ export function Minimap() {
               width={Math.max(1, n.w * sc)}
               height={Math.max(1, n.h * sc)}
               rx={1.5}
-              fill={n.color?.stroke ?? "#22d3ee"}
+              fill={n.color?.stroke ?? "var(--mm-minimap-node)"}
               opacity={0.7}
             />
           );
@@ -363,8 +371,8 @@ export function Minimap() {
           y={worldToMini(vx, vy).y}
           width={Math.max(2, vw * sc)}
           height={Math.max(2, vh * sc)}
-          fill="rgba(34,211,238,0.08)"
-          stroke="#22d3ee"
+          fill="var(--mm-minimap-viewport)"
+          stroke="var(--mm-edge-temp)"
           strokeWidth={1.5}
           strokeDasharray="3 2"
         />

@@ -66,8 +66,14 @@ export function MindMapApp() {
 
 function FloatingHelp() {
   return (
-    <div className="pointer-events-none absolute right-4 top-4 max-w-xs rounded-xl border border-white/10 bg-black/40 p-3 text-[11px] leading-relaxed text-zinc-400 backdrop-blur">
-      <div className="mb-1 text-[10px] font-medium uppercase tracking-widest text-zinc-500">
+    <div
+      className="pointer-events-none absolute right-4 top-4 max-w-xs rounded-xl p-3 text-[11px] leading-relaxed backdrop-blur"
+      style={{
+        background: "var(--mm-panel-bg)",
+        border: "1px solid var(--mm-panel-border)",
+        color: "var(--mm-text-secondary)",
+      }}
+    >      <div className="mb-1 text-[10px] font-medium uppercase tracking-widest text-zinc-500">
         Quick tips
       </div>
       <div>• <span className="text-zinc-200">Double-click</span> canvas → new node at cursor</div>

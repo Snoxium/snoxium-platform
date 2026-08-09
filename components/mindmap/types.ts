@@ -187,6 +187,7 @@ export interface MMUIState {
   matches: string[];
   activeMatch?: string;
   connectFromId?: string;
+  connectAwaitFirst?: boolean;
 }
 
 export const DEFAULT_SETTINGS: MMSettings = {

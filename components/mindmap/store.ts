@@ -303,7 +303,7 @@ function bump() {
   version++;
 }
 
-function touchNode(n: MMNode) {
+export function touchNode(n: MMNode) {
   n.updated = Date.now();
   n._v = ((n._v as number) ?? 0) + 1;
 }
@@ -527,6 +527,7 @@ export const actions = {
         ...store.ui,
         selectedNodeIds: next,
         selectedEdgeIds: [],
+        inspectorOpen: next.length === 1 ? true : store.ui.inspectorOpen,
       },
     });
   },
@@ -697,6 +698,16 @@ export const actions = {
     pushUndo();
     createEdge(store.project, { from, to, worldId: store.project.currentWorldId });
     notify();
+  },
+  startConnect(nodeId?: string) {
+    if (nodeId) {
+      setPartial({ ui: { ...store.ui, connectFromId: nodeId, connectAwaitFirst: false } });
+    } else {
+      setPartial({ ui: { ...store.ui, connectFromId: undefined, connectAwaitFirst: true } });
+    }
+  },
+  cancelConnect() {
+    setPartial({ ui: { ...store.ui, connectFromId: undefined, connectAwaitFirst: false, tempEdge: undefined } });
   },
   updateEdge(id: string, patch: Partial<MMEdge>) {
     pushUndo();

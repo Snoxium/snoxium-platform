@@ -66,7 +66,7 @@ export const EdgesLayer = memo(function EdgesLayer({
           const toP = nearestAnchor(b, { x: a.x + a.w / 2, y: a.y + a.h / 2 });
           const { d, mid } = bezierPoints(fromP, toP, e.style ?? "bezier");
           const active = selectedIds.includes(e.id) || hoveredId === e.id;
-          const color = e.color ?? (active ? "#22d3ee" : "#64748b");
+          const color = e.color ?? (active ? "var(--mm-edge-selected)" : "var(--mm-edge-stroke)");
           const marker =
             e.direction === "none"
               ? undefined
@@ -125,7 +125,7 @@ export const EdgesLayer = memo(function EdgesLayer({
               <path
                 d={d}
                 fill="none"
-                stroke="#22d3ee"
+                stroke="var(--mm-edge-temp)"
                 strokeWidth={2}
                 strokeDasharray="6 4"
                 opacity={0.85}

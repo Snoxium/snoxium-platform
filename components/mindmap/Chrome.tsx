@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { actions, useStore } from "./store";
 import type { MMEdge, MMNode, NodeKind, NodeStatus, MMProject } from "./types";
 import { PALETTE, colorForString, projectStats, uid } from "./engine";
@@ -110,9 +111,18 @@ export function Toolbar() {
           🗑
         </ToolBtn>
         <ToolBtn
-          onClick={() => actions.linkNodes(ui.selectedNodeIds)}
-          disabled={ui.selectedNodeIds.length < 2}
-          title="Connect selected"
+          onClick={() => {
+            const ids = ui.selectedNodeIds;
+            if (ids.length >= 2) {
+              actions.linkNodes(ids);
+            } else if (ids.length === 1) {
+              const nodeId = ids[0];
+              actions.startConnect(nodeId);
+            } else {
+              actions.startConnect();
+            }
+          }}
+          title={ui.selectedNodeIds.length >= 2 ? "Connect selected" : ui.selectedNodeIds.length === 1 ? "Connect FROM this node — click another node" : "Connect two nodes — click first node, then second"}
         >
           🔗
         </ToolBtn>
@@ -144,9 +154,13 @@ function ToolBtn(props: {
   disabled?: boolean;
   active?: boolean;
   children: React.ReactNode;
+  refEl?: React.RefObject<HTMLButtonElement | null>;
 }) {
   return (
     <button
+      ref={(r) => {
+        if (props.refEl) (props.refEl as any).current = r;
+      }}
       onClick={props.onClick}
       title={props.title}
       disabled={props.disabled}
@@ -197,6 +211,8 @@ function ZoomControls({ zoom }: { zoom: number }) {
 
 function AddMenu({ onPick }: { onPick: (k: NodeKind) => void }) {
   const [open, setOpen] = useState(false);
+  const [rect, setRect] = useState<DOMRect | null>(null);
+  const btnRef = useRef<HTMLButtonElement | null>(null);
   const items: { kind: NodeKind; label: string; icon: string }[] = [
     { kind: "text", label: "Text Card", icon: "💡" },
     { kind: "document", label: "Rich Doc", icon: "📄" },
@@ -207,15 +223,29 @@ function AddMenu({ onPick }: { onPick: (k: NodeKind) => void }) {
     { kind: "world", label: "Sub-World", icon: "🌐" },
   ];
   return (
-    <div className="relative">
-      <ToolBtn onClick={() => setOpen((o) => !o)}>+ Add Node</ToolBtn>
-      {open && (
+    <div>
+      <ToolBtn
+        refEl={btnRef}
+        onClick={() => {
+          setRect(btnRef.current?.getBoundingClientRect() ?? null);
+          setOpen((o) => !o);
+        }}
+      >+ Add Node</ToolBtn>
+      {open && rect && typeof document !== "undefined" && createPortal(
         <>
           <div
             className="fixed inset-0 z-40"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute left-0 top-full z-50 mt-2 grid w-52 grid-cols-1 gap-1 rounded-2xl border border-white/10 bg-[#0b0b12] p-2 shadow-2xl">
+          <div
+            className="fixed z-50 grid w-52 grid-cols-1 gap-1 rounded-2xl p-2 shadow-2xl"
+            style={{
+              left: rect.left,
+              top: rect.bottom + 8,
+              background: "var(--mm-panel-bg-solid)",
+              border: "1px solid var(--mm-panel-border)",
+            }}
+          >
             {items.map((it) => (
               <button
                 key={it.kind}
@@ -223,14 +253,16 @@ function AddMenu({ onPick }: { onPick: (k: NodeKind) => void }) {
                   onPick(it.kind);
                   setOpen(false);
                 }}
-                className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-zinc-200 hover:bg-white/5"
+                className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-white/5"
+                style={{ color: "var(--mm-text-primary)" }}
               >
                 <span>{it.icon}</span>
                 <span>{it.label}</span>
               </button>
             ))}
           </div>
-        </>
+        </>,
+        document.body
       )}
     </div>
   );
@@ -238,17 +270,28 @@ function AddMenu({ onPick }: { onPick: (k: NodeKind) => void }) {
 
 function SettingsMenu() {
   const [open, setOpen] = useState(false);
+  const [rect, setRect] = useState<DOMRect | null>(null);
+  const btnRef = useRef<HTMLButtonElement | null>(null);
   const s = useStore((st) => st.project.settings);
   const toggle = (patch: Partial<typeof s>) => actions.updateSettings(patch);
   return (
-    <div className="relative">
-      <ToolBtn onClick={() => setOpen((o) => !o)} title="Settings">⚙ Settings</ToolBtn>
-      {open && (
+    <div>
+      <ToolBtn
+        refEl={btnRef}
+        onClick={() => {
+          setRect(btnRef.current?.getBoundingClientRect() ?? null);
+          setOpen((o) => !o);
+        }}
+        title="Settings"
+      >⚙ Settings</ToolBtn>
+      {open && rect && typeof document !== "undefined" && createPortal(
           <>
             <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
             <div
-              className="absolute right-0 top-full z-50 mt-2 w-72 rounded-2xl p-3 text-xs shadow-2xl"
+              className="fixed z-50 w-72 rounded-2xl p-3 text-xs shadow-2xl"
               style={{
+                left: rect.right - 288,
+                top: rect.bottom + 8,
                 background: "var(--mm-panel-bg-solid)",
                 border: "1px solid var(--mm-panel-border)",
                 color: "var(--mm-text-primary)",
@@ -325,7 +368,8 @@ function SettingsMenu() {
               </button>
             </Section>
           </div>
-        </>
+        </>,
+        document.body
       )}
     </div>
   );
@@ -380,6 +424,8 @@ function SwitchRow({ label, on, onChange }: { label: string; on: boolean; onChan
 function ExportMenu() {
   const [open, setOpen] = useState(false);
   const [ok, setOk] = useState(false);
+  const [rect, setRect] = useState<DOMRect | null>(null);
+  const btnRef = useRef<HTMLButtonElement | null>(null);
   const project = useStore((s) => s.project);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const nodesRootRef = useRef<HTMLElement | null>(null);
@@ -439,30 +485,48 @@ function ExportMenu() {
     setOpen(false);
   };
   return (
-    <div className="relative">
-      <ToolBtn onClick={() => setOpen((o) => !o)}>{ok ? `✓ Exported` : `⬇ Export`}</ToolBtn>
-      {open && (
+    <div>
+      <ToolBtn
+        refEl={btnRef}
+        onClick={() => {
+          setRect(btnRef.current?.getBoundingClientRect() ?? null);
+          setOpen((o) => !o);
+        }}
+      >{ok ? `✓ Exported` : `⬇ Export`}</ToolBtn>
+      {open && rect && typeof document !== "undefined" && createPortal(
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full z-50 mt-2 w-52 rounded-2xl border border-white/10 bg-[#0b0b12] p-2 text-xs shadow-2xl">
+          <div
+            className="fixed z-50 w-52 rounded-2xl p-2 text-xs shadow-2xl"
+            style={{
+              left: rect.right - 208,
+              top: rect.bottom + 8,
+              background: "var(--mm-panel-bg-solid)",
+              border: "1px solid var(--mm-panel-border)",
+            }}
+          >
             {[
               ["json", "JSON (.json)"],
               ["md", "Markdown (.md)"],
               ["txt", "Plain text (.txt)"],
               ["csv", "CSV (.csv)"],
+              ["opml", "OPML outline (.opml)"],
+              ["html", "HTML page (.html)"],
               ["svg", "SVG image (.svg)"],
               ["png", "PNG image (.png)"],
             ].map(([k, label]) => (
               <button
                 key={k}
                 onClick={() => doExport(k)}
-                className="w-full rounded-lg px-2 py-1.5 text-left text-zinc-200 hover:bg-white/5"
+                className="w-full rounded-lg px-2 py-1.5 text-left hover:bg-white/5"
+                style={{ color: "var(--mm-text-primary)" }}
               >
                 {label}
               </button>
             ))}
           </div>
-        </>
+        </>,
+        document.body
       )}
     </div>
   );

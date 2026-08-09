@@ -69,6 +69,7 @@ export function useKeyboardShortcuts() {
         else if (ui.commandPaletteOpen) actions.setCommandPalette(false);
         else if (ui.inspectorOpen) actions.setInspector(false);
         else if (ui.presentation.active) actions.stopPresentation();
+        else if (ui.connectFromId || ui.connectAwaitFirst) actions.cancelConnect();
         else actions.clearSelection();
         return;
       }

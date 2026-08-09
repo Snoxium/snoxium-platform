@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { beginUndoGroup, endUndoGroup, setViewportSize, actions, useStore, getState, bumpVersion, bumpSilent, flushNotify } from "./store";
+import { beginUndoGroup, endUndoGroup, setViewportSize, actions, useStore, getState, bumpVersion, bumpSilent, flushNotify, touchNode } from "./store";
 import type { MMNode } from "./types";
 import { NodeView } from "./Node";
 import { EdgesLayer } from "./Edges";
@@ -194,7 +194,27 @@ export function Canvas() {
     const nodeEl = target.closest?.("[data-node-id]") as HTMLElement | null;
     const nodeId = nodeEl?.getAttribute("data-node-id") || undefined;
 
-    if (portSide && nodeId) {
+    const isLeft = e.button === 0;
+    const isMiddle = e.button === 1;
+    const isSpacePan = keys.current[" "] === true || dragState.current.space === true;
+    if (isMiddle || isSpacePan || e.button === 2) {
+      dragState.current = {
+        mode: "pan",
+        startX: sx,
+        startY: sy,
+        lastX: sx,
+        lastY: sy,
+        vx: 0,
+        vy: 0,
+        moved: false,
+        origCamera: { x: camera.x, y: camera.y },
+      };
+      (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+      e.preventDefault();
+      return;
+    }
+
+    if (portSide && nodeId && isLeft) {
       dragState.current = {
         mode: "connect",
         startX: sx,
@@ -212,7 +232,7 @@ export function Canvas() {
       return;
     }
 
-    if (resizeH && nodeId) {
+    if (resizeH && nodeId && isLeft) {
       const n = project.nodes[nodeId];
       if (!n || n.locked) return;
       dragState.current = {
@@ -234,7 +254,7 @@ export function Canvas() {
       return;
     }
 
-    if (nodeId) {
+    if (nodeId && isLeft) {
       const isSelected = ui.selectedNodeIds.includes(nodeId);
       const additive = e.shiftKey;
       let selection: string[];
@@ -274,24 +294,7 @@ export function Canvas() {
       return;
     }
 
-    const isMiddle = e.button === 1;
-    const isSpacePan = keys.current[" "] === true || dragState.current.space === true;
-    if (isMiddle || isSpacePan || e.button === 2) {
-      dragState.current = {
-        mode: "pan",
-        startX: sx,
-        startY: sy,
-        lastX: sx,
-        lastY: sy,
-        vx: 0,
-        vy: 0,
-        moved: false,
-        origCamera: { x: camera.x, y: camera.y },
-      };
-      (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
-      e.preventDefault();
-      return;
-    }
+    if (!isLeft) return;
 
     dragState.current = {
       mode: "marquee",
@@ -351,6 +354,12 @@ export function Canvas() {
       setVersion((v) => v + 1);
       return;
     }
+    const preConnectState = getState();
+    if (preConnectState.ui.connectFromId && !st.mode) {
+      preConnectState.ui.tempEdge = { from: preConnectState.ui.connectFromId, toX: wp.x, toY: wp.y };
+      bumpSilent();
+      setVersion((v) => v + 1);
+    }
 
     // Batch nodes/resize/marquee into RAF to drop duplicate commits
     if (_pendingMove == null) {
@@ -373,13 +382,12 @@ export function Canvas() {
             if (n.x !== nx || n.y !== ny) {
               n.x = nx;
               n.y = ny;
-              n.updated = Date.now();
+              touchNode(n);
               any = true;
             }
           }
           if (any) {
-            bumpSilent();
-            setVersion((v) => v + 1);
+            bumpVersion();
           }
         } else if (sst.mode === "resize" && sst.nodeId && sst.origSize) {
           const wdx = (ssx - sst.startX) / camera.zoom;
@@ -414,9 +422,8 @@ export function Canvas() {
             n.y = ny;
             n.w = nw;
             n.h = nh;
-            n.updated = Date.now();
-            bumpSilent();
-            setVersion((v) => v + 1);
+            touchNode(n);
+            bumpVersion();
           }
         } else if (sst.mode === "marquee") {
           const gstate = getState();
@@ -478,6 +485,20 @@ export function Canvas() {
       }
       actions.setTempEdge(undefined);
       flushNotify();
+    }
+
+    const stateNow = getState();
+    const nodeHover = (e.target as HTMLElement).closest?.("[data-node-id]") as HTMLElement | null;
+    const nodeId = nodeHover?.getAttribute("data-node-id") || undefined;
+    if ((stateNow.ui.connectFromId || stateNow.ui.connectAwaitFirst) && !st.moved && e.button === 0) {
+      if (stateNow.ui.connectAwaitFirst && nodeId) {
+        actions.startConnect(nodeId);
+      } else if (stateNow.ui.connectFromId && nodeId && nodeId !== stateNow.ui.connectFromId) {
+        actions.createEdgeFromTo(stateNow.ui.connectFromId, nodeId);
+        actions.cancelConnect();
+      } else {
+        actions.cancelConnect();
+      }
     }
 
     if (st.mode === "marquee") {
@@ -568,11 +589,12 @@ export function Canvas() {
   const gridBgStyle = (() => {
     if (!settings.gridEnabled) return {};
     const size = settings.gridSize * camera.zoom;
+    const majorSize = size * 5;
     return {
       backgroundImage:
-        "radial-gradient(circle, rgba(148,163,184,0.18) 1px, transparent 1px)",
-      backgroundSize: `${size}px ${size}px`,
-      backgroundPosition: `${camera.x}px ${camera.y}px`,
+        "radial-gradient(circle, var(--mm-grid-line) 1px, transparent 1px), radial-gradient(circle, var(--mm-grid-major) 1px, transparent 1px)",
+      backgroundSize: `${size}px ${size}px, ${majorSize}px ${majorSize}px`,
+      backgroundPosition: `${camera.x}px ${camera.y}px, ${camera.x}px ${camera.y}px`,
     };
   })();
 
@@ -591,8 +613,16 @@ export function Canvas() {
     <div
       ref={containerRef}
       data-mindmap-canvas
-      className="relative h-full w-full overflow-hidden rounded-2xl border border-white/5 bg-[#06060d]"
-      style={{ ...gridBgStyle, touchAction: "none", overscrollBehavior: "contain" }}
+      className="relative h-full w-full overflow-hidden rounded-2xl"
+      style={{
+        ...gridBgStyle,
+        touchAction: "none",
+        overscrollBehavior: "contain",
+        background: "var(--mm-canvas-bg)",
+        border: "1px solid var(--mm-panel-border)",
+        cursor:
+          ui.connectFromId || ui.connectAwaitFirst ? "crosshair" : "default",
+      }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -658,8 +688,20 @@ export function Canvas() {
       )}
 
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent,rgba(5,5,10,0.45))]" />
-      <div className="pointer-events-none absolute bottom-4 left-4 rounded-xl border border-white/10 bg-black/40 px-3 py-1.5 text-xs text-zinc-300 backdrop-blur">
-        {currentWorld?.emoji ?? "🌐"} {currentWorld?.name ?? "World"} ·{" "}
+      {(ui.connectFromId || ui.connectAwaitFirst) && (
+        <div className="pointer-events-none absolute left-1/2 top-4 z-30 flex -translate-x-1/2 items-center gap-2 rounded-xl border border-cyan-400/40 bg-cyan-500/20 px-4 py-2 text-xs font-medium text-cyan-100 backdrop-blur-md shadow-lg">
+          🔗 {ui.connectAwaitFirst ? "Connect mode: click the first node to start a connection" : ui.connectFromId ? `Connect mode: click a second node to link from "${project.nodes[ui.connectFromId]?.title ?? "Node"}"` : ""}
+          <span className="ml-2 rounded bg-black/30 px-1.5 py-0.5 text-[10px] text-cyan-200/80">ESC to cancel</span>
+        </div>
+      )}
+      <div
+        className="pointer-events-none absolute bottom-4 left-4 rounded-xl px-3 py-1.5 text-xs backdrop-blur"
+        style={{
+          background: "var(--mm-panel-bg)",
+          border: "1px solid var(--mm-panel-border)",
+          color: "var(--mm-text-secondary)",
+        }}
+      >        {currentWorld?.emoji ?? "🌐"} {currentWorld?.name ?? "World"} ·{" "}
         <span className="font-mono text-cyan-300">
           {Math.round(camera.zoom * 100)}%
         </span>
