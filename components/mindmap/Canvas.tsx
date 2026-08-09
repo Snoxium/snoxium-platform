@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { beginUndoGroup, endUndoGroup, setViewportSize, actions, useStore, getState, bumpVersion } from "./store";
+import { beginUndoGroup, endUndoGroup, setViewportSize, actions, useStore, getState, bumpVersion, bumpSilent, flushNotify } from "./store";
 import type { MMNode } from "./types";
 import { NodeView } from "./Node";
 import { EdgesLayer } from "./Edges";
@@ -79,14 +79,14 @@ export function Canvas() {
 
   const visibleNodes: MMNode[] = useMemo(
     () =>
-      Object.values(project.nodes).filter(
-        (n) => n.worldId === worldId && !n.hidden,
-      ),
-    [project.nodes, worldId],
+      Object.values(getState().project.nodes)
+        .filter((n) => n.worldId === worldId && !n.hidden)
+        .map((n) => ({ ...n })),
+    [worldId, project.updated, project.currentWorldId],
   );
   const visibleEdges = useMemo(
-    () => Object.values(project.edges).filter((e) => e.worldId === worldId),
-    [project.edges, worldId],
+    () => Object.values(getState().project.edges).filter((e) => e.worldId === worldId),
+    [worldId, project.updated, project.currentWorldId],
   );
   const nodesById = useMemo(() => {
     const m: Record<string, MMNode> = {};
@@ -345,7 +345,10 @@ export function Canvas() {
       return;
     }
     if (st.mode === "connect" && st.connectingFrom) {
-      actions.setTempEdge({ from: st.connectingFrom, toX: wp.x, toY: wp.y });
+      const state = getState();
+      state.ui.tempEdge = { from: st.connectingFrom, toX: wp.x, toY: wp.y };
+      bumpSilent();
+      setVersion((v) => v + 1);
       return;
     }
 
@@ -374,7 +377,10 @@ export function Canvas() {
               any = true;
             }
           }
-          if (any) bumpVersion();
+          if (any) {
+            bumpSilent();
+            setVersion((v) => v + 1);
+          }
         } else if (sst.mode === "resize" && sst.nodeId && sst.origSize) {
           const wdx = (ssx - sst.startX) / camera.zoom;
           const wdy = (ssy - sst.startY) / camera.zoom;
@@ -409,10 +415,12 @@ export function Canvas() {
             n.w = nw;
             n.h = nh;
             n.updated = Date.now();
-            bumpVersion();
+            bumpSilent();
+            setVersion((v) => v + 1);
           }
         } else if (sst.mode === "marquee") {
-          actions.setMarquee({ x1: sst.startX, y1: sst.startY, x2: ssx, y2: ssy });
+          const gstate = getState();
+          gstate.ui.marquee = { x1: sst.startX, y1: sst.startY, x2: ssx, y2: ssy };
           const wx1 = Math.min(sst.startX, ssx);
           const wy1 = Math.min(sst.startY, ssy);
           const wx2 = Math.max(sst.startX, ssx);
@@ -430,7 +438,10 @@ export function Canvas() {
               hit.push(n.id);
             }
           }
-          actions.selectNode(hit.length ? hit : sst.startSel ?? [], false);
+          gstate.ui.selectedNodeIds = hit.length ? hit : (sst.startSel ?? []);
+          gstate.ui.selectedEdgeIds = [];
+          bumpSilent();
+          setVersion((v) => v + 1);
         }
       });
     } else {
@@ -446,6 +457,9 @@ export function Canvas() {
     try {
       (e.currentTarget as Element).releasePointerCapture?.(e.pointerId);
     } catch {}
+    if (st.mode === "nodes" || st.mode === "resize" || st.mode === "marquee" || st.mode === "connect") {
+      flushNotify();
+    }
     const el = containerRef.current;
     const rect = el?.getBoundingClientRect();
     const sx = rect ? e.clientX - rect.left : 0;
@@ -463,10 +477,11 @@ export function Canvas() {
         actions.createEdgeFromTo(st.connectingFrom, toId);
       }
       actions.setTempEdge(undefined);
+      flushNotify();
     }
 
     if (st.mode === "marquee") {
-      actions.setMarquee(undefined);
+      getState().ui.marquee = undefined;
     }
 
     if (st.mode === "pan" && settings.inertiaEnabled) {
@@ -561,12 +576,13 @@ export function Canvas() {
     };
   })();
 
-  const marqueeRect = ui.marquee
+  const uiLive = getState().ui;
+  const marqueeRect = uiLive.marquee
     ? (() => {
-        const x = Math.min(ui.marquee.x1, ui.marquee.x2);
-        const y = Math.min(ui.marquee.y1, ui.marquee.y2);
-        const w = Math.abs(ui.marquee.x2 - ui.marquee.x1);
-        const h = Math.abs(ui.marquee.y2 - ui.marquee.y1);
+        const x = Math.min(uiLive.marquee!.x1, uiLive.marquee!.x2);
+        const y = Math.min(uiLive.marquee!.y1, uiLive.marquee!.y2);
+        const w = Math.abs(uiLive.marquee!.x2 - uiLive.marquee!.x1);
+        const h = Math.abs(uiLive.marquee!.y2 - uiLive.marquee!.y1);
         return { x, y, w, h };
       })()
     : null;
@@ -610,9 +626,9 @@ export function Canvas() {
           edges={visibleEdges}
           nodesById={nodesById}
           worldId={worldId}
-          hoveredId={ui.hoveredEdgeId}
-          selectedIds={ui.selectedEdgeIds}
-          tempEdge={ui.tempEdge}
+          hoveredId={uiLive.hoveredEdgeId}
+          selectedIds={uiLive.selectedEdgeIds}
+          tempEdge={uiLive.tempEdge}
           width={dims.w}
           height={dims.h}
         />
@@ -621,8 +637,8 @@ export function Canvas() {
             <NodeView
               key={n.id}
               node={n}
-              selected={ui.selectedNodeIds.includes(n.id)}
-              hovered={hoveredId === n.id || ui.hoveredNodeId === n.id}
+              selected={uiLive.selectedNodeIds.includes(n.id)}
+              hovered={hoveredId === n.id || uiLive.hoveredNodeId === n.id}
               tagsById={project.tags}
             />
           ))}

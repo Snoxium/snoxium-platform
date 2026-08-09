@@ -53,8 +53,7 @@ const statusDot: Record<NonNullable<MMNode["status"]>, string> = {
   blocked: "#fb7185",
 };
 
-export const NodeView = memo(
-  function NodeView({
+const _NodeView = function NodeView({
     node,
     selected,
     hovered,
@@ -222,6 +221,16 @@ export const NodeView = memo(
               <div
                 className="truncate text-[15px] font-semibold leading-snug"
                 style={{ color: text }}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (node.isWorld && node.childWorldId && e.detail === 1) {
+                    actions.enterWorld(node.childWorldId);
+                    return;
+                  }
+                }}
                 onDoubleClick={(e) => {
                   e.stopPropagation();
                   e.preventDefault();
@@ -387,47 +396,7 @@ export const NodeView = memo(
       )}
     </div>
   );
-},
-  (prev, next) => {
-    const a = prev.node;
-    const b = next.node;
-    return (
-      prev.selected === next.selected &&
-      prev.hovered === next.hovered &&
-      prev.tagsById === next.tagsById &&
-      a.id === b.id &&
-      a.x === b.x &&
-      a.y === b.y &&
-      a.w === b.w &&
-      a.h === b.h &&
-      a.kind === b.kind &&
-      a.title === b.title &&
-      a.subtitle === b.subtitle &&
-      a.description === b.description &&
-      a.status === b.status &&
-      a.priority === b.priority &&
-      a.progress === b.progress &&
-      a.due === b.due &&
-      a.color?.fill === b.color?.fill &&
-      a.color?.stroke === b.color?.stroke &&
-      a.color?.text === b.color?.text &&
-      a.isWorld === b.isWorld &&
-      a.isPortal === b.isPortal &&
-      a.editLocked === b.editLocked &&
-      a.locked === b.locked &&
-      a.favorite === b.favorite &&
-      a.pinned === b.pinned &&
-      a.notes === b.notes &&
-      a.childWorldId === b.childWorldId &&
-      a.portalTarget === b.portalTarget &&
-      a.shape === b.shape &&
-      (a.tags?.length ?? 0) === (b.tags?.length ?? 0) &&
-      (a.checklist?.length ?? 0) === (b.checklist?.length ?? 0) &&
-      a.updated === b.updated &&
-      a.opacity === b.opacity
-    );
-  },
-);
+};
 
 function ChecklistView({
   nodeId,
@@ -506,3 +475,50 @@ function ChecklistView({
     </div>
   );
 }
+
+function nodesEqual(a: MMNode, b: MMNode) {
+  return (
+    a.id === b.id &&
+    a.x === b.x &&
+    a.y === b.y &&
+    a.w === b.w &&
+    a.h === b.h &&
+    a.title === b.title &&
+    a.subtitle === b.subtitle &&
+    a.description === b.description &&
+    a.notes === b.notes &&
+    a.kind === b.kind &&
+    a.icon === b.icon &&
+    a.status === b.status &&
+    a.priority === b.priority &&
+    a.progress === b.progress &&
+    a.dueDate === b.dueDate &&
+    a.locked === b.locked &&
+    a.editLocked === b.editLocked &&
+    a.pinned === b.pinned &&
+    a.favourite === b.favourite &&
+    a.hidden === b.hidden &&
+    a.isWorld === b.isWorld &&
+    a.childWorldId === b.childWorldId &&
+    a.color?.fill === b.color?.fill &&
+    a.color?.stroke === b.color?.stroke &&
+    a.color?.text === b.color?.text &&
+    a.shape === b.shape &&
+    a.opacity === b.opacity &&
+    a.font?.size === b.font?.size &&
+    a.font?.bold === b.font?.bold &&
+    a.rotation === b.rotation &&
+    a.tags === b.tags &&
+    a.checklist === b.checklist &&
+    a.updated === b.updated
+  );
+}
+function nodePropsEqual(prev: Props, next: Props) {
+  return (
+    prev.selected === next.selected &&
+    prev.hovered === next.hovered &&
+    prev.tagsById === next.tagsById &&
+    nodesEqual(prev.node, next.node)
+  );
+}
+export const NodeView = memo(_NodeView, nodePropsEqual);

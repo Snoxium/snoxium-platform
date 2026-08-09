@@ -18,33 +18,66 @@ export function Toolbar() {
 
   return (
     <div className="relative z-50 flex flex-col gap-2">
-      <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto rounded-2xl border border-white/10 bg-black/30 p-2 backdrop-blur">
-        <div className="flex shrink-0 items-center gap-1 rounded-xl border border-white/10 bg-white/[0.04] px-2 py-1">
+      <div
+        className="flex flex-nowrap items-center gap-1.5 overflow-x-auto rounded-2xl p-2 backdrop-blur"
+        style={{
+          background: "var(--mm-panel-bg)",
+          border: "1px solid var(--mm-panel-border)",
+        }}
+      >
+        <div
+          className="flex shrink-0 items-center gap-1 rounded-xl px-2 py-1"
+          style={{
+            background: "var(--mm-card-bg)",
+            border: "1px solid var(--mm-panel-border)",
+            color: "var(--mm-text-primary)",
+          }}
+        >
           <span className="text-base">{world?.emoji ?? "🌐"}</span>
           <input
             value={world?.name ?? ""}
             onChange={(e) => actions.renameWorld(project.currentWorldId, e.target.value, world?.emoji)}
-            className="w-32 bg-transparent text-xs font-semibold text-zinc-100 outline-none placeholder:text-zinc-500"
+            className="w-32 bg-transparent text-xs font-semibold outline-none placeholder:text-zinc-500"
+            style={{ color: "var(--mm-text-primary)" }}
             placeholder="World name"
           />
         </div>
         {parentWorld && (
           <button
             onClick={() => actions.leaveToParentWorld()}
-            className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-white/10 bg-white/[0.04] px-2 py-1.5 text-[11px] text-zinc-200 hover:bg-white/[0.08]"
+            className="inline-flex shrink-0 items-center gap-1 rounded-xl px-2 py-1.5 text-[11px] hover:opacity-90"
+            style={{
+              background: "var(--mm-card-bg)",
+              border: "1px solid var(--mm-panel-border)",
+              color: "var(--mm-text-primary)",
+            }}
             title="Go to parent world"
           >
             ← {parentWorld.emoji} {parentWorld.name.length > 14 ? parentWorld.name.slice(0, 14) + "…" : parentWorld.name}
           </button>
         )}
+        {!parentWorld && world && world.id !== Object.values(project.worlds)[0]?.id && (
+          <button
+            onClick={() => actions.enterWorld(Object.values(project.worlds)[0]?.id)}
+            className="inline-flex shrink-0 items-center gap-1 rounded-xl px-2 py-1.5 text-[11px] hover:opacity-90"
+            style={{
+              background: "var(--mm-card-bg)",
+              border: "1px solid var(--mm-panel-border)",
+              color: "var(--mm-text-primary)",
+            }}
+            title="Go to root world"
+          >
+            ⤴ Root
+          </button>
+        )}
 
-        <div className="mx-1 shrink-0 h-5 w-px bg-white/10" />
+        <div className="mx-1 shrink-0 h-5 w-px" style={{ background: "var(--mm-panel-border)" }} />
 
-        <ToolBtn onClick={() => actions.resetCamera()} title="Home (H)">🏠</ToolBtn>
+        <ToolBtn onClick={() => actions.resetCamera()} title="Reset view (H)">🏠</ToolBtn>
         <ToolBtn onClick={() => actions.fitSelection()} title="Fit selection (F)">🎯 Fit</ToolBtn>
         <ZoomControls zoom={camera.zoom} />
 
-        <div className="mx-1 shrink-0 h-5 w-px bg-white/10" />
+        <div className="mx-1 shrink-0 h-5 w-px" style={{ background: "var(--mm-panel-border)" }} />
 
         <AddMenu onPick={(kind) => {
           const { x, y } = { x: -camera.x / camera.zoom, y: -camera.y / camera.zoom };
@@ -211,25 +244,41 @@ function SettingsMenu() {
     <div className="relative">
       <ToolBtn onClick={() => setOpen((o) => !o)} title="Settings">⚙ Settings</ToolBtn>
       {open && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full z-50 mt-2 w-72 rounded-2xl border border-white/10 bg-[#0b0b12] p-3 text-xs shadow-2xl">
-            <Section title="Theme">
-              {(["dark", "light", "amoled"] as const).map((t) => (
-                <button
-                  key={t}
-                  onClick={() => toggle({ theme: t })}
-                  className={
-                    "rounded-lg border px-3 py-1.5 capitalize transition " +
-                    (s.theme === t
-                      ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-200"
-                      : "border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/10")
-                  }
-                >
-                  {t}
-                </button>
-              ))}
-            </Section>
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+            <div
+              className="absolute right-0 top-full z-50 mt-2 w-72 rounded-2xl p-3 text-xs shadow-2xl"
+              style={{
+                background: "var(--mm-panel-bg-solid)",
+                border: "1px solid var(--mm-panel-border)",
+                color: "var(--mm-text-primary)",
+              }}
+            >
+              <Section title="Theme">
+                {(["dark", "light", "amoled"] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => toggle({ theme: t })}
+                    className={
+                      "rounded-lg border px-3 py-1.5 capitalize transition " +
+                      (s.theme === t
+                        ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-200"
+                        : " hover:opacity-90")
+                    }
+                    style={
+                      s.theme !== t
+                        ? {
+                            borderColor: "var(--mm-panel-border)",
+                            background: "var(--mm-card-bg)",
+                            color: "var(--mm-text-primary)",
+                          }
+                        : undefined
+                    }
+                  >
+                    {t}
+                  </button>
+                ))}
+              </Section>
             <SwitchRow label="Grid" on={s.gridEnabled} onChange={(v) => toggle({ gridEnabled: v })} />
             <SwitchRow label="Snap to grid" on={s.snapToGrid} onChange={(v) => toggle({ snapToGrid: v })} />
             <SwitchRow label="Rulers" on={s.rulersEnabled} onChange={(v) => toggle({ rulersEnabled: v })} />

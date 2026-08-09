@@ -303,6 +303,11 @@ function bump() {
   version++;
 }
 
+function touchNode(n: MMNode) {
+  n.updated = Date.now();
+  n._v = ((n._v as number) ?? 0) + 1;
+}
+
 const undoStack: string[] = [];
 const redoStack: string[] = [];
 let undoSessionId = 0;
@@ -366,6 +371,14 @@ export function getState(): StoreShape {
 export function bumpVersion() {
   bump();
   emit();
+}
+
+export function bumpSilent() {
+  bump();
+}
+
+export function flushNotify() {
+  notify();
 }
 
 function setPartial(partial: Partial<StoreShape>) {
@@ -565,6 +578,7 @@ export const actions = {
       color: partial.color,
       icon: partial.icon,
     });
+    touchNode(n);
     notify();
     actions.selectNode(n.id);
     return n.id;
@@ -573,7 +587,8 @@ export const actions = {
     pushUndo();
     const n = store.project.nodes[id];
     if (!n || n.editLocked) return;
-    Object.assign(n, patch, { updated: Date.now() });
+    Object.assign(n, patch);
+    touchNode(n);
     notify();
   },
   mutateNodesRaw(mutator: () => void) {
@@ -587,7 +602,7 @@ export const actions = {
       if (!n || n.locked) continue;
       n.x = snapV(n.x + dx);
       n.y = snapV(n.y + dy);
-      n.updated = Date.now();
+      touchNode(n);
     }
     bump();
   },
@@ -602,7 +617,7 @@ export const actions = {
     if (!n || n.locked) return;
     n.w = Math.max(80, w);
     n.h = Math.max(60, h);
-    n.updated = Date.now();
+    touchNode(n);
     notify();
   },
   deleteNodes(ids: string[]) {
@@ -633,7 +648,7 @@ export const actions = {
         worldId: n.worldId,
       });
       clone.created = Date.now();
-      clone.updated = Date.now();
+      touchNode(clone);
       idMap[id] = clone.id;
       newIds.push(clone.id);
     }
@@ -712,7 +727,7 @@ export const actions = {
     pushUndo();
     const list = n.checklist ?? [];
     n.checklist = list.map((it) => (it.id === itemId ? { ...it, ...patch } : it));
-    n.updated = Date.now();
+    touchNode(n);
     notify();
   },
   addChecklistItem(id: string, text: string) {
@@ -720,7 +735,7 @@ export const actions = {
     if (!n) return;
     pushUndo();
     n.checklist = [...(n.checklist ?? []), { id: uid(), text, done: false }];
-    n.updated = Date.now();
+    touchNode(n);
     notify();
   },
   removeChecklistItem(id: string, itemId: string) {
@@ -728,7 +743,7 @@ export const actions = {
     if (!n) return;
     pushUndo();
     n.checklist = (n.checklist ?? []).filter((it) => it.id !== itemId);
-    n.updated = Date.now();
+    touchNode(n);
     notify();
   },
   addTagToNode(nodeId: string, tagName: string) {
@@ -737,7 +752,7 @@ export const actions = {
     const tag = ensureTag(store.project, tagName);
     pushUndo();
     n.tags = Array.from(new Set([...(n.tags ?? []), tag.id]));
-    n.updated = Date.now();
+    touchNode(n);
     notify();
   },
   removeTagFromNode(nodeId: string, tagId: string) {
@@ -745,7 +760,7 @@ export const actions = {
     if (!n) return;
     pushUndo();
     n.tags = (n.tags ?? []).filter((t) => t !== tagId);
-    n.updated = Date.now();
+    touchNode(n);
     notify();
   },
   toggleNode(
@@ -756,7 +771,7 @@ export const actions = {
     if (!n) return;
     pushUndo();
     (n as any)[flag] = !(n as any)[flag];
-    n.updated = Date.now();
+    touchNode(n);
     notify();
   },
   setPortalTo(nodeId: string, targetNodeId: string) {
@@ -779,11 +794,16 @@ export const actions = {
     }
     n.isWorld = true;
     n.kind = "world";
-    n.updated = Date.now();
+    touchNode(n);
     notify();
   },
   enterWorld(worldId: string) {
     if (!store.project.worlds[worldId]) return;
+    const curWorld = store.project.worlds[store.project.currentWorldId];
+    if (curWorld) {
+      curWorld.camera = { ...store.camera };
+      curWorld.updated = Date.now();
+    }
     store.project.currentWorldId = worldId;
     const w = store.project.worlds[worldId];
     store.camera = w.camera ?? { x: 0, y: 0, zoom: 1 };

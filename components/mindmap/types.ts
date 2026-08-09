@@ -85,6 +85,7 @@ export interface MMNode {
   icon?: string;
   font?: { size?: number; family?: string; bold?: boolean };
   order?: number;
+  _v?: number;
 }
 
 export interface MMEdge {
@@ -185,6 +186,7 @@ export interface MMUIState {
   searchingFor?: string;
   matches: string[];
   activeMatch?: string;
+  connectFromId?: string;
 }
 
 export const DEFAULT_SETTINGS: MMSettings = {

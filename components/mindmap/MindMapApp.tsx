@@ -39,14 +39,20 @@ export function MindMapApp() {
         </div>
         {ui.atlasOpen && (
           <div className="pointer-events-none absolute inset-y-0 left-0 z-40 flex w-64 items-stretch p-0 pr-3">
-            <div className="pointer-events-auto h-full w-full min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/60 backdrop-blur-md shadow-2xl">
+            <div className="pointer-events-auto h-full w-full min-w-0 overflow-hidden rounded-2xl backdrop-blur-md shadow-2xl" style={{
+              background: "var(--mm-panel-bg)",
+              border: "1px solid var(--mm-panel-border)",
+            }}>
               <Atlas />
             </div>
           </div>
         )}
         {ui.inspectorOpen && (
           <div className="pointer-events-none absolute inset-y-0 right-0 z-40 flex w-80 items-stretch p-0 pl-3">
-            <div className="pointer-events-auto h-full w-full min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/60 backdrop-blur-md shadow-2xl">
+            <div className="pointer-events-auto h-full w-full min-w-0 overflow-hidden rounded-2xl backdrop-blur-md shadow-2xl" style={{
+              background: "var(--mm-panel-bg)",
+              border: "1px solid var(--mm-panel-border)",
+            }}>
               <Inspector />
             </div>
           </div>

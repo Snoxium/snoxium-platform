@@ -3,6 +3,15 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --mm-panel-bg: rgba(255, 255, 255, 0.72);
+  --mm-panel-bg-solid: #f7f7f8;
+  --mm-panel-border: rgba(0, 0, 0, 0.08);
+  --mm-canvas-bg: #f3f4f6;
+  --mm-text-primary: #0a0a0a;
+  --mm-text-secondary: #3f3f46;
+  --mm-text-muted: #71717a;
+  --mm-card-bg: rgba(255, 255, 255, 0.85);
+  --mm-input-bg: rgba(255, 255, 255, 0.9);
 }
 
 @theme inline {
@@ -17,6 +26,48 @@
     --background: #0a0a0a;
     --foreground: #ededed;
   }
+}
+
+:root.mm-theme-dark {
+  --background: #0a0a0f;
+  --foreground: #ededed;
+  --mm-panel-bg: rgba(0, 0, 0, 0.3);
+  --mm-panel-bg-solid: #0b0b12;
+  --mm-panel-border: rgba(255, 255, 255, 0.1);
+  --mm-canvas-bg: #07080c;
+  --mm-text-primary: #e4e4e7;
+  --mm-text-secondary: #a1a1aa;
+  --mm-text-muted: #71717a;
+  --mm-card-bg: rgba(255, 255, 255, 0.04);
+  --mm-input-bg: rgba(255, 255, 255, 0.05);
+}
+
+:root.mm-theme-amoled {
+  --background: #000000;
+  --foreground: #fafafa;
+  --mm-panel-bg: rgba(0, 0, 0, 0.85);
+  --mm-panel-bg-solid: #000000;
+  --mm-panel-border: rgba(255, 255, 255, 0.08);
+  --mm-canvas-bg: #000000;
+  --mm-text-primary: #ffffff;
+  --mm-text-secondary: #d4d4d8;
+  --mm-text-muted: #71717a;
+  --mm-card-bg: rgba(255, 255, 255, 0.03);
+  --mm-input-bg: rgba(255, 255, 255, 0.04);
+}
+
+:root.mm-theme-light {
+  --background: #ffffff;
+  --foreground: #171717;
+  --mm-panel-bg: rgba(255, 255, 255, 0.72);
+  --mm-panel-bg-solid: #ffffff;
+  --mm-panel-border: rgba(0, 0, 0, 0.08);
+  --mm-canvas-bg: #f7f7f8;
+  --mm-text-primary: #0a0a0a;
+  --mm-text-secondary: #3f3f46;
+  --mm-text-muted: #71717a;
+  --mm-card-bg: rgba(255, 255, 255, 0.9);
+  --mm-input-bg: rgba(255, 255, 255, 0.95);
 }
 
 body {
