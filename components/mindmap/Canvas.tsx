@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { actions, setViewportSize, useStore } from "./store";
+import { beginUndoGroup, endUndoGroup, setViewportSize, actions, useStore } from "./store";
 import type { MMNode } from "./types";
 import { NodeView } from "./Node";
 import { EdgesLayer } from "./Edges";
@@ -12,6 +12,10 @@ export function Canvas() {
   const project = useStore((s) => s.project);
   const camera = useStore((s) => s.camera);
   const ui = useStore((s) => s.ui);
+  const [_version, setVersion] = useState(0);
+  const size = useStore(() => 1);
+  void size;
+
   const settings = project.settings;
   const [hoveredId, setHoveredId] = useState<string | undefined>();
 
@@ -39,12 +43,15 @@ export function Canvas() {
     space?: boolean;
     shift?: boolean;
     startSel?: string[];
+    undoGroup?: number;
   }>({ mode: null, startX: 0, startY: 0, lastX: 0, lastY: 0, vx: 0, vy: 0, moved: false });
 
   const inertiaRef = useRef<number | null>(null);
   const keys = useRef<Record<string, boolean>>({});
   const lastTick = useRef<number>(0);
   const keys2 = useRef<Record<string, boolean>>({});
+  const sizeState = useRef<{ w: number; h: number }>({ w: 1200, h: 800 });
+  const [dims, setDims] = useState({ w: 1200, h: 800 });
 
   const worldId = project.currentWorldId;
   const currentWorld = project.worlds[worldId];
@@ -68,7 +75,13 @@ export function Canvas() {
 
   const onResize = useCallback(() => {
     const el = containerRef.current;
-    if (el) setViewportSize(el.clientWidth, el.clientHeight);
+    if (el) {
+      const w = el.clientWidth || 1200;
+      const h = el.clientHeight || 800;
+      setViewportSize(w, h);
+      sizeState.current = { w, h };
+      setDims({ w, h });
+    }
   }, []);
 
   useEffect(() => {
@@ -116,24 +129,31 @@ export function Canvas() {
     };
   }, [camera.zoom, settings.wasdEnabled, moveCameraBy]);
 
-  const onWheel = useCallback((e: React.WheelEvent) => {
-    const el = containerRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const sx = e.clientX - rect.left;
-    const sy = e.clientY - rect.top;
-    if (e.ctrlKey || e.metaKey || Math.abs(e.deltaY) < 40) {
+  const onWheel = useCallback(
+    (e: React.WheelEvent) => {
+      const el = containerRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+
+      if (e.shiftKey) {
+        e.preventDefault();
+        const dx = Math.abs(e.deltaX) > 1 ? e.deltaX : e.deltaY;
+        actions.nudgeCamera(-dx, -e.deltaY);
+        return;
+      }
+
+      // Default: scroll = zoom at cursor (no Ctrl required)
       e.preventDefault();
       const factor = Math.exp(-e.deltaY * 0.0015);
       actions.zoomAt(sx, sy, camera.zoom * factor, {
         w: rect.width,
         h: rect.height,
       });
-    } else {
-      e.preventDefault();
-      actions.nudgeCamera(-e.deltaX, -e.deltaY);
-    }
-  }, [camera.zoom]);
+    },
+    [camera.zoom],
+  );
 
   const snap = (v: number) =>
     settings.snapToGrid ? Math.round(v / settings.gridSize) * settings.gridSize : v;
@@ -151,14 +171,6 @@ export function Canvas() {
     const resizeH = target.getAttribute?.("data-resize");
     const nodeEl = target.closest?.("[data-node-id]") as HTMLElement | null;
     const nodeId = nodeEl?.getAttribute("data-node-id") || undefined;
-
-    const edgeListener = (ev: Event) => {
-      const detail = (ev as CustomEvent<{ id: string; shift: boolean }>).detail;
-      actions.selectEdge(detail.id, detail.shift);
-    };
-    (e.target as Element).addEventListener("mm-edge-click", edgeListener, {
-      once: true,
-    });
 
     if (portSide && nodeId) {
       dragState.current = {
@@ -194,6 +206,7 @@ export function Canvas() {
         resizeHandle: resizeH,
         origSize: { x: n.x, y: n.y, w: n.w, h: n.h },
       };
+      dragState.current.undoGroup = beginUndoGroup();
       (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
       e.preventDefault();
       return;
@@ -233,6 +246,7 @@ export function Canvas() {
         shift: additive,
         startSel: [...selection],
       };
+      dragState.current.undoGroup = beginUndoGroup();
       (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
       e.stopPropagation();
       return;
@@ -274,13 +288,20 @@ export function Canvas() {
     (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
   };
 
+  let _raf = 0;
+  let _pendingMove: { sx: number; sy: number; e: null | React.PointerEvent } | null = null;
+
   const onPointerMove = (e: React.PointerEvent) => {
     const el = containerRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
-    const wp = screenToWorld(sx, sy, camera.x, camera.y, camera.zoom);
+
+    const nodeHoverEl = (e.target as HTMLElement).closest?.("[data-node-id]") as HTMLElement | null;
+    const hov = nodeHoverEl?.getAttribute("data-node-id") || undefined;
+    if (hov !== hoveredId) setHoveredId(hov);
+
     const st = dragState.current;
     const dx = sx - st.lastX;
     const dy = sy - st.lastY;
@@ -293,69 +314,93 @@ export function Canvas() {
     st.lastX = sx;
     st.lastY = sy;
 
-    const nodeHoverEl = (e.target as HTMLElement).closest?.("[data-node-id]") as HTMLElement | null;
-    setHoveredId(nodeHoverEl?.getAttribute("data-node-id") || undefined);
+    if (!st.mode) return;
+
+    const wp = screenToWorld(sx, sy, camera.x, camera.y, camera.zoom);
 
     if (st.mode === "pan") {
       actions.nudgeCamera(dx, dy);
-    } else if (st.mode === "nodes" && st.origPos) {
-      const wdx = (sx - st.startX) / camera.zoom;
-      const wdy = (sy - st.startY) / camera.zoom;
-      const updates: Array<[string, number, number]> = [];
-      for (const [id, orig] of st.origPos) {
-        const n = project.nodes[id];
-        if (!n || n.locked) continue;
-        const nx = snap(orig.x + wdx);
-        const ny = snap(orig.y + wdy);
-        if (n.x !== nx || n.y !== ny) updates.push([id, nx, ny]);
-      }
-      if (updates.length) {
-        for (const [id, nx, ny] of updates) {
-          const n = project.nodes[id];
-          n.x = nx;
-          n.y = ny;
-          n.updated = Date.now();
-        }
-        actions.saveNow();
-      }
-    } else if (st.mode === "resize" && st.nodeId && st.origSize) {
-      const wdx = dx / camera.zoom;
-      const wdy = dy / camera.zoom;
-      const n = project.nodes[st.nodeId];
-      const nw = Math.max(80, st.origSize.w + wdx);
-      const nh = Math.max(60, st.origSize.h + wdy);
-      if (n && (Math.abs(nw - n.w) > 0.1 || Math.abs(nh - n.h) > 0.1)) {
-        n.w = nw;
-        n.h = nh;
-        n.updated = Date.now();
-      }
-    } else if (st.mode === "connect" && st.connectingFrom) {
+      return;
+    }
+    if (st.mode === "connect" && st.connectingFrom) {
       actions.setTempEdge({ from: st.connectingFrom, toX: wp.x, toY: wp.y });
-    } else if (st.mode === "marquee") {
-      actions.setMarquee({ x1: st.startX, y1: st.startY, x2: sx, y2: sy });
-      const wx1 = Math.min(st.startX, sx);
-      const wy1 = Math.min(st.startY, sy);
-      const wx2 = Math.max(st.startX, sx);
-      const wy2 = Math.max(st.startY, sy);
-      const w1 = screenToWorld(wx1, wy1, camera.x, camera.y, camera.zoom);
-      const w2 = screenToWorld(wx2, wy2, camera.x, camera.y, camera.zoom);
-      const r = { x: w1.x, y: w1.y, w: w2.x - w1.x, h: w2.y - w1.y };
-      const hit: string[] = [...(st.startSel ?? [])];
-      for (const n of visibleNodes) {
-        if (hit.includes(n.id)) continue;
-        if (
-          pointInRect({ x: n.x + n.w / 2, y: n.y + n.h / 2 }, r) ||
-          pointInRect({ x: n.x, y: n.y }, r)
-        ) {
-          hit.push(n.id);
+      return;
+    }
+
+    // Batch nodes/resize/marquee into RAF to drop duplicate commits
+    if (_pendingMove == null) {
+      _pendingMove = { sx, sy, e: null };
+      _raf = requestAnimationFrame(() => {
+        const p = _pendingMove!;
+        _pendingMove = null;
+        const ssx = p.sx;
+        const ssy = p.sy;
+        const sst = dragState.current;
+        if (sst.mode === "nodes" && sst.origPos) {
+          const wdx = (ssx - sst.startX) / camera.zoom;
+          const wdy = (ssy - sst.startY) / camera.zoom;
+          const updates: Array<[string, number, number]> = [];
+          for (const [id, orig] of sst.origPos) {
+            const n = project.nodes[id];
+            if (!n || n.locked) continue;
+            const nx = snap(orig.x + wdx);
+            const ny = snap(orig.y + wdy);
+            if (n.x !== nx || n.y !== ny) updates.push([id, nx, ny]);
+          }
+          if (updates.length) {
+            for (const [id, nx, ny] of updates) {
+              const n = project.nodes[id];
+              n.x = nx;
+              n.y = ny;
+              n.updated = Date.now();
+            }
+            setVersion((x) => x + 1);
+            actions.saveNow();
+          }
+        } else if (sst.mode === "resize" && sst.nodeId && sst.origSize) {
+          const wdx = dx / camera.zoom;
+          const wdy = dy / camera.zoom;
+          const n = project.nodes[sst.nodeId];
+          const nw = Math.max(80, sst.origSize.w + wdx);
+          const nh = Math.max(60, sst.origSize.h + wdy);
+          if (n && (Math.abs(nw - n.w) > 0.1 || Math.abs(nh - n.h) > 0.1)) {
+            n.w = nw;
+            n.h = nh;
+            n.updated = Date.now();
+            setVersion((x) => x + 1);
+          }
+        } else if (sst.mode === "marquee") {
+          actions.setMarquee({ x1: sst.startX, y1: sst.startY, x2: ssx, y2: ssy });
+          const wx1 = Math.min(sst.startX, ssx);
+          const wy1 = Math.min(sst.startY, ssy);
+          const wx2 = Math.max(sst.startX, ssx);
+          const wy2 = Math.max(sst.startY, ssy);
+          const w1 = screenToWorld(wx1, wy1, camera.x, camera.y, camera.zoom);
+          const w2 = screenToWorld(wx2, wy2, camera.x, camera.y, camera.zoom);
+          const r = { x: w1.x, y: w1.y, w: w2.x - w1.x, h: w2.y - w1.y };
+          const hit: string[] = [...(sst.startSel ?? [])];
+          for (const n of visibleNodes) {
+            if (hit.includes(n.id)) continue;
+            if (
+              pointInRect({ x: n.x + n.w / 2, y: n.y + n.h / 2 }, r) ||
+              pointInRect({ x: n.x, y: n.y }, r)
+            ) {
+              hit.push(n.id);
+            }
+          }
+          actions.selectNode(hit.length ? hit : sst.startSel ?? [], false);
         }
-      }
-      actions.selectNode(hit.length ? hit : st.startSel ?? [], false);
+      });
+    } else {
+      _pendingMove.sx = sx;
+      _pendingMove.sy = sy;
     }
   };
 
   const onPointerUp = (e: React.PointerEvent) => {
     const st = dragState.current;
+    if (_raf) cancelAnimationFrame(_raf);
+    _pendingMove = null;
     try {
       (e.currentTarget as Element).releasePointerCapture?.(e.pointerId);
     } catch {}
@@ -363,6 +408,11 @@ export function Canvas() {
     const rect = el?.getBoundingClientRect();
     const sx = rect ? e.clientX - rect.left : 0;
     const sy = rect ? e.clientY - rect.top : 0;
+
+    if (st.undoGroup != null) {
+      endUndoGroup(st.undoGroup);
+      st.undoGroup = undefined;
+    }
 
     if (st.mode === "connect" && st.connectingFrom) {
       const nodeHover = (e.target as HTMLElement).closest?.("[data-node-id]") as HTMLElement | null;
@@ -375,10 +425,16 @@ export function Canvas() {
       const n = project.nodes[st.nodeId];
       if (n?.isWorld && n.childWorldId) {
         actions.enterWorld(n.childWorldId);
+        st.mode = null;
+        st.moved = false;
+        dragState.current.mode = null;
         return;
       }
       if (n?.isPortal && n.portalTarget) {
         actions.jumpToNode(n.portalTarget);
+        st.mode = null;
+        st.moved = false;
+        dragState.current.mode = null;
         return;
       }
     }
@@ -407,6 +463,9 @@ export function Canvas() {
       const nodeHover = (e.target as HTMLElement).closest?.("[data-node-id]") as HTMLElement | null;
       if (!nodeHover) actions.clearSelection();
     }
+
+    void sx;
+    void sy;
 
     dragState.current = {
       ...dragState.current,
@@ -497,6 +556,7 @@ export function Canvas() {
   return (
     <div
       ref={containerRef}
+      data-mindmap-canvas
       className="relative h-full w-full overflow-hidden rounded-2xl border border-white/5 bg-[#06060d]"
       style={gridBgStyle}
       onWheel={onWheel}
@@ -515,6 +575,8 @@ export function Canvas() {
         style={{
           transform: `translate3d(${camera.x}px, ${camera.y}px, 0) scale(${camera.zoom})`,
           transformOrigin: "0 0",
+          width: `${dims.w}px`,
+          height: `${dims.h}px`,
         }}
       >
         <EdgesLayer
@@ -524,6 +586,8 @@ export function Canvas() {
           hoveredId={ui.hoveredEdgeId}
           selectedIds={ui.selectedEdgeIds}
           tempEdge={ui.tempEdge}
+          width={dims.w}
+          height={dims.h}
         />
         <div className="absolute left-0 top-0" style={{ pointerEvents: "auto" }}>
           {visibleNodes.map((n) => (
@@ -556,6 +620,7 @@ export function Canvas() {
         <span className="font-mono text-cyan-300">
           {Math.round(camera.zoom * 100)}%
         </span>
+        <span className="ml-3 text-zinc-500">· Scroll to zoom · Shift+scroll to pan · Double-click empty = new</span>
       </div>
     </div>
   );

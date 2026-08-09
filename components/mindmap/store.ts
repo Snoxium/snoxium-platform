@@ -21,6 +21,13 @@ const STORAGE_KEY = "snoxium.mindmap.v1";
 const SNAPSHOT_KEY = "snoxium.mindmap.snapshots.v1";
 const MAX_HISTORY = 200;
 
+export interface StoreShape {
+  project: MMProject;
+  ui: MMUIState;
+  camera: { x: number; y: number; zoom: number };
+  version: number;
+}
+
 function makeDefaultWorlds(): Record<string, MMWorld> {
   const root = uid();
   const now = Date.now();
@@ -168,7 +175,18 @@ export function createNode(
 export function createEdge(
   project: MMProject,
   partial: Partial<MMEdge> & Pick<MMEdge, "from" | "to">,
-): MMEdge {
+): MMEdge | null {
+  if (partial.from === partial.to) return null;
+  // Prevent exact duplicates (same world, from, to)
+  for (const e of Object.values(project.edges)) {
+    if (
+      e.worldId === (partial.worldId ?? project.currentWorldId) &&
+      e.from === partial.from &&
+      e.to === partial.to
+    ) {
+      return e;
+    }
+  }
   const now = Date.now();
   const id = partial.id ?? uid();
   const edge: MMEdge = {
@@ -232,12 +250,6 @@ function pushHistory(project: MMProject, kind: string, id: string) {
   }
 }
 
-interface Store {
-  project: MMProject;
-  ui: MMUIState;
-  camera: { x: number; y: number; zoom: number };
-}
-
 type Listener = () => void;
 
 function loadProject(): MMProject {
@@ -264,7 +276,8 @@ const initial: MMProject = (() => {
   }
 })();
 
-let state: Store = {
+let version = 1;
+const store: StoreShape = {
   project: initial,
   ui: {
     selectedNodeIds: [],
@@ -281,40 +294,63 @@ let state: Store = {
     y: 0,
     zoom: 1,
   },
-};
+  get version() {
+    return version;
+  },
+} as StoreShape;
+
+function bump() {
+  version++;
+  (store as any).version = version;
+}
 
 const undoStack: string[] = [];
 const redoStack: string[] = [];
-
-function pushUndo() {
-  undoStack.push(JSON.stringify(state.project));
+let undoSessionId = 0;
+let undoSessionToken: null | { id: number; count: number } = null;
+function pushUndo(groupToken?: number | null) {
+  if (groupToken != null && undoSessionToken?.id === groupToken) {
+    undoSessionToken.count++;
+    return;
+  }
+  undoStack.push(JSON.stringify(store.project));
   if (undoStack.length > 100) undoStack.shift();
   redoStack.length = 0;
+}
+export function beginUndoGroup(): number {
+  const id = ++undoSessionId;
+  undoSessionToken = { id, count: 0 };
+  pushUndo();
+  return id;
+}
+export function endUndoGroup(_token: number) {
+  undoSessionToken = null;
 }
 
 const listeners = new Set<Listener>();
 function emit() {
+  bump();
   listeners.forEach((l) => l());
 }
 
 let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
 function scheduleAutoSave() {
-  if (!state.project.settings.autoSave) return;
+  if (!store.project.settings.autoSave) return;
   if (autoSaveTimer) clearTimeout(autoSaveTimer);
   autoSaveTimer = setTimeout(() => {
     persist();
-  }, state.project.settings.autoSaveIntervalMs ?? 2000);
+  }, store.project.settings.autoSaveIntervalMs ?? 2000);
 }
 
 function persist() {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.project));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(store.project));
   } catch {}
 }
 
 function notify() {
-  state.project.updated = Date.now();
+  store.project.updated = Date.now();
   scheduleAutoSave();
   emit();
 }
@@ -324,27 +360,57 @@ export function subscribe(listener: Listener) {
   return () => listeners.delete(listener);
 }
 
-export function getState(): Store {
-  return state;
+export function getState(): StoreShape {
+  return store;
 }
 
-function setPartial(partial: Partial<Store>) {
-  state = { ...state, ...partial };
+function setPartial(partial: Partial<StoreShape>) {
+  Object.assign(store, partial);
   emit();
 }
 
-export function useStore<T>(sel: (s: Store) => T): T {
+export function useSnapshot<T>(sel: (s: StoreShape) => T): T {
   return useSyncExternalStore(
     subscribe,
-    () => sel(state),
-    () => sel(state),
+    () => {
+      bump();
+      const s = store;
+      (s as any).version = version;
+      return sel(s);
+    },
+    () => {
+      const s = store;
+      return sel(s);
+    },
   );
+}
+
+export function useStore<T>(sel: (s: StoreShape) => T): T {
+  return useSnapshot(sel);
+}
+
+export function worldNodesBoundingBox() {
+  const nodes = Object.values(store.project.nodes).filter(
+    (n) => n.worldId === store.project.currentWorldId,
+  );
+  if (!nodes.length) return null;
+  let x1 = Infinity,
+    y1 = Infinity,
+    x2 = -Infinity,
+    y2 = -Infinity;
+  for (const n of nodes) {
+    x1 = Math.min(x1, n.x);
+    y1 = Math.min(y1, n.y);
+    x2 = Math.max(x2, n.x + n.w);
+    y2 = Math.max(y2, n.y + n.h);
+  }
+  return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
 }
 
 export const actions = {
   setCamera(x: number, y: number, zoom: number) {
-    state.camera = { x, y, zoom };
-    const w = state.project.worlds[state.project.currentWorldId];
+    store.camera = { x, y, zoom };
+    const w = store.project.worlds[store.project.currentWorldId];
     if (w) {
       w.camera = { x, y, zoom };
       w.updated = Date.now();
@@ -353,9 +419,9 @@ export const actions = {
   },
   nudgeCamera(dx: number, dy: number) {
     actions.setCamera(
-      state.camera.x + dx,
-      state.camera.y + dy,
-      state.camera.zoom,
+      store.camera.x + dx,
+      store.camera.y + dy,
+      store.camera.zoom,
     );
   },
   resetCamera() {
@@ -367,13 +433,13 @@ export const actions = {
     actions.fitRect(bbox.x - 80, bbox.y - 80, bbox.w + 160, bbox.h + 160);
   },
   fitNode(nodeId: string) {
-    const n = state.project.nodes[nodeId];
+    const n = store.project.nodes[nodeId];
     if (!n) return;
     actions.fitRect(n.x - 40, n.y - 40, n.w + 80, n.h + 80);
   },
   fitSelection() {
-    const nodes = state.ui.selectedNodeIds
-      .map((id) => state.project.nodes[id])
+    const nodes = store.ui.selectedNodeIds
+      .map((id) => store.project.nodes[id])
       .filter(Boolean) as MMNode[];
     if (!nodes.length) {
       actions.resetCamera();
@@ -395,7 +461,7 @@ export const actions = {
     const viewport = viewportSizeRef.current;
     const vw = viewport?.w ?? 1200;
     const vh = viewport?.h ?? 800;
-    const scale = Math.min(vw / w, vh / h, 2);
+    const scale = Math.min(vw / Math.max(1, w), vh / Math.max(1, h), 3);
     const nx = -x * scale + (vw - w * scale) / 2;
     const ny = -y * scale + (vh - h * scale) / 2;
     actions.setCamera(nx, ny, scale);
@@ -406,17 +472,13 @@ export const actions = {
     newZoom: number,
     viewport?: { w: number; h: number },
   ) {
-    const { x, y, zoom } = state.camera;
-    const vz = clamp(
-      newZoom,
-      0.05,
-      12,
-    );
+    const { x, y, zoom } = store.camera;
+    const vz = clamp(newZoom, 0.05, 12);
     const ratio = vz / zoom;
     const cx = viewport ? sx - viewport.w / 2 : sx;
     const cy = viewport ? sy - viewport.h / 2 : sy;
-    const nx = x - (cx) * (ratio - 1);
-    const ny = y - (cy) * (ratio - 1);
+    const nx = x - cx * (ratio - 1);
+    const ny = y - cy * (ratio - 1);
     actions.setCamera(nx, ny, vz);
   },
   setZoom(z: number) {
@@ -426,65 +488,65 @@ export const actions = {
   selectNode(id: string | string[] | null, additive = false) {
     if (id == null) {
       setPartial({
-        ui: { ...state.ui, selectedNodeIds: [], selectedEdgeIds: [] },
+        ui: { ...store.ui, selectedNodeIds: [], selectedEdgeIds: [] },
       });
       return;
     }
-    const ids = Array.isArray(id) ? id : [id];
+    const ids = Array.isArray(id) ? Array.from(new Set(id)) : [id];
     const next = additive
-      ? Array.from(new Set([...state.ui.selectedNodeIds, ...ids]))
+      ? Array.from(new Set([...store.ui.selectedNodeIds, ...ids]))
       : ids;
     setPartial({
       ui: {
-        ...state.ui,
+        ...store.ui,
         selectedNodeIds: next,
         selectedEdgeIds: [],
-        inspectorOpen: next.length > 0 ? true : state.ui.inspectorOpen,
+        inspectorOpen: next.length > 0 ? true : store.ui.inspectorOpen,
       },
     });
   },
   selectEdge(id: string | string[] | null, additive = false) {
     if (id == null) {
       setPartial({
-        ui: { ...state.ui, selectedEdgeIds: [] },
+        ui: { ...store.ui, selectedEdgeIds: [] },
       });
       return;
     }
-    const ids = Array.isArray(id) ? id : [id];
+    const ids = Array.isArray(id) ? Array.from(new Set(id)) : [id];
     const next = additive
-      ? Array.from(new Set([...state.ui.selectedEdgeIds, ...ids]))
+      ? Array.from(new Set([...store.ui.selectedEdgeIds, ...ids]))
       : ids;
     setPartial({
       ui: {
-        ...state.ui,
+        ...store.ui,
         selectedEdgeIds: next,
         selectedNodeIds: [],
-        inspectorOpen: next.length > 0 ? true : state.ui.inspectorOpen,
+        inspectorOpen: next.length > 0 ? true : store.ui.inspectorOpen,
       },
     });
   },
   clearSelection() {
     setPartial({
-      ui: { ...state.ui, selectedNodeIds: [], selectedEdgeIds: [] },
+      ui: { ...store.ui, selectedNodeIds: [], selectedEdgeIds: [] },
     });
   },
   setMarquee(m: { x1: number; y1: number; x2: number; y2: number } | undefined) {
-    setPartial({ ui: { ...state.ui, marquee: m } });
+    setPartial({ ui: { ...store.ui, marquee: m } });
   },
   setTempEdge(e: { from: string; toX: number; toY: number } | undefined) {
-    setPartial({ ui: { ...state.ui, tempEdge: e } });
+    setPartial({ ui: { ...store.ui, tempEdge: e } });
   },
   createNodeAt(wx: number, wy: number, partial: Partial<MMNode> = {}) {
     pushUndo();
-    const p = state.project;
+    const p = store.project;
     const kind: NodeKind = (partial.kind as NodeKind) ?? "text";
     const n = createNode(p, {
       worldId: p.currentWorldId,
       title: partial.title ?? "New Node",
       subtitle: partial.subtitle,
       kind,
-      x: wx - ((partial.w as number) ?? 120),
-      y: wy - ((partial.h as number) ?? 55),
+      x: wx - (((partial.w as number) ?? 240) / 2),
+      y: wy - (((partial.h as number) ?? 110) / 2),
       w: partial.w ?? 240,
       h: partial.h ?? 110,
       tags: partial.tags ?? [],
@@ -497,37 +559,37 @@ export const actions = {
   },
   updateNode(id: string, patch: Partial<MMNode>) {
     pushUndo();
-    const n = state.project.nodes[id];
+    const n = store.project.nodes[id];
     if (!n || n.editLocked) return;
     Object.assign(n, patch, { updated: Date.now() });
     notify();
   },
-  moveNodes(ids: string[], dx: number, dy: number, snap = false, grid = 40) {
-    pushUndo();
+  mutateNodesRaw(mutator: () => void) {
+    mutator();
+    notify();
+  },
+  moveNodesRaw(ids: string[], dx: number, dy: number, snap = false, grid = 40) {
     const snapV = (v: number) => (snap ? Math.round(v / grid) * grid : v);
     for (const id of ids) {
-      const n = state.project.nodes[id];
+      const n = store.project.nodes[id];
       if (!n || n.locked) continue;
       n.x = snapV(n.x + dx);
       n.y = snapV(n.y + dy);
       n.updated = Date.now();
     }
+    bump();
+  },
+  moveNodes(ids: string[], dx: number, dy: number, snap = false, grid = 40) {
+    pushUndo();
+    actions.moveNodesRaw(ids, dx, dy, snap, grid);
     notify();
   },
-  resizeNode(id: string, w: number, h: number, anchor?: "se" | "sw" | "ne" | "nw") {
+  resizeNode(id: string, w: number, h: number, _anchor?: "se" | "sw" | "ne" | "nw") {
     pushUndo();
-    const n = state.project.nodes[id];
+    const n = store.project.nodes[id];
     if (!n || n.locked) return;
-    const oldW = n.w;
-    const oldH = n.h;
     n.w = Math.max(80, w);
     n.h = Math.max(60, h);
-    if (anchor === "sw" || anchor === "nw") {
-      n.x -= n.w - oldW;
-    }
-    if (anchor === "ne" || anchor === "nw") {
-      n.y -= n.h - oldH;
-    }
     n.updated = Date.now();
     notify();
   },
@@ -535,9 +597,9 @@ export const actions = {
     if (!ids.length) return;
     pushUndo();
     const setIds = new Set(ids);
-    for (const id of ids) delete state.project.nodes[id];
-    for (const e of Object.values(state.project.edges)) {
-      if (setIds.has(e.from) || setIds.has(e.to)) delete state.project.edges[e.id];
+    for (const id of ids) delete store.project.nodes[id];
+    for (const e of Object.values(store.project.edges)) {
+      if (setIds.has(e.from) || setIds.has(e.to)) delete store.project.edges[e.id];
     }
     notify();
     actions.clearSelection();
@@ -545,7 +607,7 @@ export const actions = {
   duplicateNodes(ids: string[]) {
     if (!ids.length) return;
     pushUndo();
-    const p = state.project;
+    const p = store.project;
     const idMap: Record<string, string> = {};
     const newIds: string[] = [];
     for (const id of ids) {
@@ -581,7 +643,7 @@ export const actions = {
   linkNodes(ids: string[]) {
     if (ids.length < 2) return;
     pushUndo();
-    const p = state.project;
+    const p = store.project;
     for (let i = 1; i < ids.length; i++) {
       createEdge(p, { from: ids[i - 1], to: ids[i], worldId: p.currentWorldId });
     }
@@ -589,15 +651,15 @@ export const actions = {
   },
   cloneAsLinked(id: string, wx: number, wy: number) {
     pushUndo();
-    const src = state.project.nodes[id];
+    const src = store.project.nodes[id];
     if (!src) return;
-    const n = createNode(state.project, {
+    const n = createNode(store.project, {
       ...src,
       id: uid(),
       linkedToId: id,
       x: wx - src.w / 2,
       y: wy - src.h / 2,
-      worldId: state.project.currentWorldId,
+      worldId: store.project.currentWorldId,
     });
     notify();
     actions.selectNode(n.id);
@@ -606,12 +668,12 @@ export const actions = {
   createEdgeFromTo(from: string, to: string) {
     if (from === to) return;
     pushUndo();
-    createEdge(state.project, { from, to, worldId: state.project.currentWorldId });
+    createEdge(store.project, { from, to, worldId: store.project.currentWorldId });
     notify();
   },
   updateEdge(id: string, patch: Partial<MMEdge>) {
     pushUndo();
-    const e = state.project.nodes[id] ? null : state.project.edges[id];
+    const e = store.project.edges[id];
     if (!e) return;
     Object.assign(e, patch, { updated: Date.now() });
     notify();
@@ -619,7 +681,7 @@ export const actions = {
   deleteEdges(ids: string[]) {
     if (!ids.length) return;
     pushUndo();
-    for (const id of ids) delete state.project.edges[id];
+    for (const id of ids) delete store.project.edges[id];
     notify();
     actions.clearSelection();
   },
@@ -633,17 +695,16 @@ export const actions = {
     actions.updateNode(id, { progress: clamp(progress, 0, 1) });
   },
   setChecklistItem(id: string, itemId: string, patch: Partial<ChecklistItem>) {
-    const n = state.project.nodes[id];
+    const n = store.project.nodes[id];
     if (!n) return;
     pushUndo();
     const list = n.checklist ?? [];
-    const next = list.map((it) => (it.id === itemId ? { ...it, ...patch } : it));
-    n.checklist = next;
+    n.checklist = list.map((it) => (it.id === itemId ? { ...it, ...patch } : it));
     n.updated = Date.now();
     notify();
   },
   addChecklistItem(id: string, text: string) {
-    const n = state.project.nodes[id];
+    const n = store.project.nodes[id];
     if (!n) return;
     pushUndo();
     n.checklist = [...(n.checklist ?? []), { id: uid(), text, done: false }];
@@ -651,7 +712,7 @@ export const actions = {
     notify();
   },
   removeChecklistItem(id: string, itemId: string) {
-    const n = state.project.nodes[id];
+    const n = store.project.nodes[id];
     if (!n) return;
     pushUndo();
     n.checklist = (n.checklist ?? []).filter((it) => it.id !== itemId);
@@ -659,24 +720,27 @@ export const actions = {
     notify();
   },
   addTagToNode(nodeId: string, tagName: string) {
-    const n = state.project.nodes[nodeId];
+    const n = store.project.nodes[nodeId];
     if (!n) return;
-    const tag = ensureTag(state.project, tagName);
+    const tag = ensureTag(store.project, tagName);
     pushUndo();
     n.tags = Array.from(new Set([...(n.tags ?? []), tag.id]));
     n.updated = Date.now();
     notify();
   },
   removeTagFromNode(nodeId: string, tagId: string) {
-    const n = state.project.nodes[nodeId];
+    const n = store.project.nodes[nodeId];
     if (!n) return;
     pushUndo();
     n.tags = (n.tags ?? []).filter((t) => t !== tagId);
     n.updated = Date.now();
     notify();
   },
-  toggleNode(id: string, flag: "locked" | "editLocked" | "pinned" | "favourite" | "hidden") {
-    const n = state.project.nodes[id];
+  toggleNode(
+    id: string,
+    flag: "locked" | "editLocked" | "pinned" | "favourite" | "hidden",
+  ) {
+    const n = store.project.nodes[id];
     if (!n) return;
     pushUndo();
     (n as any)[flag] = !(n as any)[flag];
@@ -687,15 +751,19 @@ export const actions = {
     actions.updateNode(nodeId, {
       isPortal: true,
       portalTarget: targetNodeId,
-      kind: "text",
     });
   },
   convertToWorld(nodeId: string) {
-    const n = state.project.nodes[nodeId];
+    const n = store.project.nodes[nodeId];
     if (!n) return;
     pushUndo();
     if (!n.childWorldId) {
-      n.childWorldId = createChildWorld(state.project, state.project.currentWorldId, n.title, "🧩");
+      n.childWorldId = createChildWorld(
+        store.project,
+        store.project.currentWorldId,
+        n.title,
+        "🧩",
+      );
     }
     n.isWorld = true;
     n.kind = "world";
@@ -703,20 +771,20 @@ export const actions = {
     notify();
   },
   enterWorld(worldId: string) {
-    if (!state.project.worlds[worldId]) return;
-    state.project.currentWorldId = worldId;
-    const w = state.project.worlds[worldId];
-    state.camera = w.camera ?? { x: 0, y: 0, zoom: 1 };
+    if (!store.project.worlds[worldId]) return;
+    store.project.currentWorldId = worldId;
+    const w = store.project.worlds[worldId];
+    store.camera = w.camera ?? { x: 0, y: 0, zoom: 1 };
     actions.clearSelection();
     notify();
   },
   leaveToParentWorld() {
-    const cur = state.project.worlds[state.project.currentWorldId];
+    const cur = store.project.worlds[store.project.currentWorldId];
     if (!cur?.parentWorldId) return;
     actions.enterWorld(cur.parentWorldId);
   },
   renameWorld(worldId: string, name: string, emoji?: string) {
-    const w = state.project.worlds[worldId];
+    const w = store.project.worlds[worldId];
     if (!w) return;
     pushUndo();
     w.name = name;
@@ -727,8 +795,8 @@ export const actions = {
   createWorld(name: string, emoji?: string, parentId?: string): string {
     pushUndo();
     const id = createChildWorld(
-      state.project,
-      parentId ?? state.project.currentWorldId,
+      store.project,
+      parentId ?? store.project.currentWorldId,
       name,
       emoji,
     );
@@ -736,51 +804,56 @@ export const actions = {
     return id;
   },
   setInspector(v: boolean) {
-    setPartial({ ui: { ...state.ui, inspectorOpen: v } });
+    setPartial({ ui: { ...store.ui, inspectorOpen: v } });
   },
   setAtlas(v: boolean) {
-    setPartial({ ui: { ...state.ui, atlasOpen: v } });
+    setPartial({ ui: { ...store.ui, atlasOpen: v } });
   },
   setSearch(v: boolean, q?: string) {
     setPartial({
       ui: {
-        ...state.ui,
+        ...store.ui,
         searchOpen: v,
-        searchingFor: q ?? state.ui.searchingFor,
+        searchingFor: q ?? store.ui.searchingFor,
       },
     });
   },
   setSearchQuery(q: string, matches: string[], active?: string) {
     setPartial({
-      ui: { ...state.ui, searchingFor: q, matches, activeMatch: active },
+      ui: {
+        ...store.ui,
+        searchingFor: q,
+        matches,
+        activeMatch: active,
+      },
     });
   },
   setCommandPalette(v: boolean) {
-    setPartial({ ui: { ...state.ui, commandPaletteOpen: v } });
+    setPartial({ ui: { ...store.ui, commandPaletteOpen: v } });
   },
   setHovered(nodeId?: string, edgeId?: string) {
     setPartial({
-      ui: { ...state.ui, hoveredNodeId: nodeId, hoveredEdgeId: edgeId },
+      ui: { ...store.ui, hoveredNodeId: nodeId, hoveredEdgeId: edgeId },
     });
   },
   addCameraBookmark(name: string) {
     const bm: MMCameraBookmark = {
       id: uid(),
-      worldId: state.project.currentWorldId,
+      worldId: store.project.currentWorldId,
       name,
-      x: state.camera.x,
-      y: state.camera.y,
-      zoom: state.camera.zoom,
+      x: store.camera.x,
+      y: store.camera.y,
+      zoom: store.camera.zoom,
     };
     pushUndo();
-    state.project.bookmarks.push(bm);
+    store.project.bookmarks.push(bm);
     notify();
     return bm.id;
   },
   gotoBookmark(id: string) {
-    const bm = state.project.bookmarks.find((b) => b.id === id);
+    const bm = store.project.bookmarks.find((b) => b.id === id);
     if (!bm) return;
-    if (bm.worldId !== state.project.currentWorldId) {
+    if (bm.worldId !== store.project.currentWorldId) {
       actions.enterWorld(bm.worldId);
     }
     actions.setCamera(bm.x, bm.y, bm.zoom);
@@ -788,26 +861,26 @@ export const actions = {
   startPresentation(nodeIds?: string[]) {
     const ids =
       nodeIds ??
-      (state.ui.selectedNodeIds.length
-        ? state.ui.selectedNodeIds
-        : Object.values(state.project.nodes)
-            .filter((n) => n.worldId === state.project.currentWorldId)
+      (store.ui.selectedNodeIds.length
+        ? store.ui.selectedNodeIds
+        : Object.values(store.project.nodes)
+            .filter((n) => n.worldId === store.project.currentWorldId)
             .map((n) => n.id));
     setPartial({
       ui: {
-        ...state.ui,
+        ...store.ui,
         presentation: { active: true, nodeIds: ids, index: 0 },
       },
     });
     if (ids[0]) actions.fitNode(ids[0]);
   },
   stepPresentation(dir: 1 | -1) {
-    const p = state.ui.presentation;
+    const p = store.ui.presentation;
     if (!p.active) return;
     const nextIndex = clamp(p.index + dir, 0, p.nodeIds.length - 1);
     setPartial({
       ui: {
-        ...state.ui,
+        ...store.ui,
         presentation: { ...p, index: nextIndex },
       },
     });
@@ -817,47 +890,51 @@ export const actions = {
   stopPresentation() {
     setPartial({
       ui: {
-        ...state.ui,
-        presentation: { ...state.ui.presentation, active: false },
+        ...store.ui,
+        presentation: { ...store.ui.presentation, active: false },
       },
     });
   },
   updateSettings(patch: Partial<MMProject["settings"]>) {
     pushUndo();
-    state.project.settings = { ...state.project.settings, ...patch };
+    store.project.settings = { ...store.project.settings, ...patch };
     notify();
   },
   undo() {
     const prev = undoStack.pop();
     if (!prev) return;
-    redoStack.push(JSON.stringify(state.project));
-    state.project = JSON.parse(prev) as MMProject;
-    state.camera =
-      state.project.worlds[state.project.currentWorldId]?.camera ?? state.camera;
+    redoStack.push(JSON.stringify(store.project));
+    store.project = JSON.parse(prev) as MMProject;
+    store.camera =
+      store.project.worlds[store.project.currentWorldId]?.camera ?? store.camera;
     notify();
   },
   redo() {
     const next = redoStack.pop();
     if (!next) return;
-    undoStack.push(JSON.stringify(state.project));
-    state.project = JSON.parse(next) as MMProject;
-    state.camera =
-      state.project.worlds[state.project.currentWorldId]?.camera ?? state.camera;
+    undoStack.push(JSON.stringify(store.project));
+    store.project = JSON.parse(next) as MMProject;
+    store.camera =
+      store.project.worlds[store.project.currentWorldId]?.camera ?? {
+        x: 0,
+        y: 0,
+        zoom: 1,
+      };
     notify();
   },
   saveNow() {
     persist();
   },
   exportJSON(): string {
-    return JSON.stringify(state.project, null, 2);
+    return JSON.stringify(store.project, null, 2);
   },
   importJSON(text: string) {
     const parsed = JSON.parse(text) as MMProject;
     if (parsed.version !== 1) throw new Error("Unsupported version");
     pushUndo();
-    state.project = parsed;
-    state.camera =
-      state.project.worlds[state.project.currentWorldId]?.camera ?? {
+    store.project = parsed;
+    store.camera =
+      store.project.worlds[store.project.currentWorldId]?.camera ?? {
         x: 0,
         y: 0,
         zoom: 1,
@@ -879,7 +956,7 @@ export const actions = {
         id: uid(),
         name: name ?? `Snapshot ${new Date().toLocaleString()}`,
         ts: Date.now(),
-        data: JSON.stringify(state.project),
+        data: JSON.stringify(store.project),
       });
       if (snaps.length > 50) snaps.splice(0, snaps.length - 50);
       localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(snaps));
@@ -904,9 +981,9 @@ export const actions = {
     const s = snaps.find((x) => x.id === id);
     if (!s) return;
     pushUndo();
-    state.project = JSON.parse(s.data) as MMProject;
-    state.camera =
-      state.project.worlds[state.project.currentWorldId]?.camera ?? {
+    store.project = JSON.parse(s.data) as MMProject;
+    store.camera =
+      store.project.worlds[store.project.currentWorldId]?.camera ?? {
         x: 0,
         y: 0,
         zoom: 1,
@@ -915,34 +992,34 @@ export const actions = {
   },
   resetProject() {
     pushUndo();
-    state.project = seededProject();
-    state.camera = state.project.worlds[state.project.currentWorldId].camera!;
+    store.project = seededProject();
+    store.camera = store.project.worlds[store.project.currentWorldId].camera!;
     notify();
   },
   setProjectName(name: string) {
     pushUndo();
-    state.project.name = name;
+    store.project.name = name;
     notify();
   },
   jumpToNode(id: string) {
-    const n = state.project.nodes[id];
+    const n = store.project.nodes[id];
     if (!n) return;
-    if (n.worldId !== state.project.currentWorldId) {
+    if (n.worldId !== store.project.currentWorldId) {
       actions.enterWorld(n.worldId);
     }
     actions.selectNode(id);
     actions.fitNode(id);
   },
   layoutAuto(worldId?: string) {
-    const wid = worldId ?? state.project.currentWorldId;
-    const nodes = Object.values(state.project.nodes).filter(
+    const wid = worldId ?? store.project.currentWorldId;
+    const nodes = Object.values(store.project.nodes).filter(
       (n) => n.worldId === wid && !n.parentId,
     );
     if (!nodes.length) return;
     pushUndo();
-    const byId = (id: string) => state.project.nodes[id];
+    const byId = (id: string) => store.project.nodes[id];
     const roots = nodes.filter((n) => {
-      for (const e of Object.values(state.project.edges)) {
+      for (const e of Object.values(store.project.edges)) {
         if (e.to === n.id) return false;
       }
       return true;
@@ -952,7 +1029,7 @@ export const actions = {
     const spacingX = 320;
     const spacingY = 220;
     let cursorY = 0;
-    const layout = (id: string, depth: number, yStart: number) => {
+    const layout = (id: string, depth: number, yStart: number): { yUsed: number } => {
       if (visited.has(id)) return { yUsed: 0 };
       visited.add(id);
       const node = byId(id);
@@ -960,7 +1037,7 @@ export const actions = {
       node.x = depth * spacingX;
       node.y = yStart;
       const children: string[] = [];
-      for (const e of Object.values(state.project.edges)) {
+      for (const e of Object.values(store.project.edges)) {
         if (e.from === id) children.push(e.to);
       }
       let y = yStart;
@@ -985,24 +1062,6 @@ export const actions = {
     actions.resetCamera();
   },
 };
-
-function worldNodesBoundingBox() {
-  const nodes = Object.values(state.project.nodes).filter(
-    (n) => n.worldId === state.project.currentWorldId,
-  );
-  if (!nodes.length) return null;
-  let x1 = Infinity,
-    y1 = Infinity,
-    x2 = -Infinity,
-    y2 = -Infinity;
-  for (const n of nodes) {
-    x1 = Math.min(x1, n.x);
-    y1 = Math.min(y1, n.y);
-    x2 = Math.max(x2, n.x + n.w);
-    y2 = Math.max(y2, n.y + n.h);
-  }
-  return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
-}
 
 export const viewportSizeRef = { current: { w: 1200, h: 800 } };
 export function setViewportSize(w: number, h: number) {

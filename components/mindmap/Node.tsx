@@ -59,16 +59,29 @@ export const NodeView = memo(function NodeView({
   hovered,
   tagsById,
 }: Props) {
-  const editing = useStore((s) =>
-    s.ui.selectedNodeIds.length === 1 &&
-    s.ui.selectedNodeIds[0] === node.id,
+  const isSingleSelected = useStore(
+    (s) => s.ui.selectedNodeIds.length === 1 && s.ui.selectedNodeIds[0] === node.id,
   );
+  const [editingTitle, setEditingTitle] = useState(false);
   const [draft, setDraft] = useState(node.title);
-  const editingRef = useRef<HTMLTextAreaElement | null>(null);
+  const titleRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     setDraft(node.title);
   }, [node.id, node.title]);
+
+  // Enter edit mode: only when double-clicked title; NOT automatically on select
+  useEffect(() => {
+    if (editingTitle) {
+      const t = setTimeout(() => {
+        titleRef.current?.focus();
+        try {
+          titleRef.current?.select();
+        } catch {}
+      }, 0);
+      return () => clearTimeout(t);
+    }
+  }, [editingTitle]);
 
   const fill =
     node.color?.fill ??
@@ -89,8 +102,9 @@ export const NodeView = memo(function NodeView({
   const text = node.color?.text ?? "#e4e4e7";
   const opacity = node.opacity ?? 1;
 
-  const save = () => {
+  const saveTitle = () => {
     if (draft !== node.title) actions.updateNode(node.id, { title: draft });
+    setEditingTitle(false);
   };
 
   const shapeRadius = (() => {
@@ -115,6 +129,8 @@ export const NodeView = memo(function NodeView({
     .map((id) => tagsById[id])
     .filter(Boolean) as MMTag[];
 
+  void isSingleSelected;
+
   return (
     <div
       className={`absolute will-change-transform select-none ${
@@ -129,6 +145,20 @@ export const NodeView = memo(function NodeView({
         zIndex: selected ? 10 : hovered ? 8 : 2,
       }}
       data-node-id={node.id}
+      onPointerDown={(e) => {
+        // Keep node-drag working, but don't steal events from inputs/buttons
+        const tgt = e.target as HTMLElement;
+        if (
+          tgt.tagName === "INPUT" ||
+          tgt.tagName === "TEXTAREA" ||
+          tgt.tagName === "BUTTON" ||
+          tgt.closest("button") ||
+          tgt.hasAttribute("data-port") ||
+          tgt.hasAttribute("data-resize")
+        ) {
+          return;
+        }
+      }}
     >
       <div
         className="absolute inset-0 overflow-hidden border shadow-[0_10px_40px_-20px_rgba(0,0,0,0.6)] backdrop-blur-[2px] transition-[box-shadow,border-color] duration-150"
@@ -156,8 +186,7 @@ export const NodeView = memo(function NodeView({
           <div
             className="flex h-8 w-8 flex-none items-center justify-center rounded-xl text-base"
             style={{
-              background:
-                (node.color?.stroke ?? "#22d3ee") + "22",
+              background: (node.color?.stroke ?? "#22d3ee") + "22",
               border: `1px solid ${(node.color?.stroke ?? "#fff") + "22"}`,
               color: node.color?.text,
             }}
@@ -166,24 +195,21 @@ export const NodeView = memo(function NodeView({
             <span>{node.icon ?? kindIcon(node.kind)}</span>
           </div>
           <div className="min-w-0 flex-1">
-            {editing ? (
+            {editingTitle ? (
               <textarea
-                ref={editingRef}
-                autoFocus
+                ref={titleRef}
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
-                onBlur={save}
+                onBlur={saveTitle}
+                onPointerDown={(e) => e.stopPropagation()}
                 onKeyDown={(e) => {
+                  e.stopPropagation();
                   if (e.key === "Escape") {
                     setDraft(node.title);
-                    e.currentTarget.blur();
-                  } else if (
-                    e.key === "Enter" &&
-                    !e.shiftKey
-                  ) {
+                    setEditingTitle(false);
+                  } else if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
-                    save();
-                    e.currentTarget.blur();
+                    saveTitle();
                   }
                 }}
                 className="w-full resize-none bg-transparent text-[15px] font-semibold leading-snug outline-none"
@@ -194,10 +220,16 @@ export const NodeView = memo(function NodeView({
               <div
                 className="truncate text-[15px] font-semibold leading-snug"
                 style={{ color: text }}
+                onPointerDown={(e) => {
+                  // Allow dragging via title, but don't enter edit mode on first click
+                  e.stopPropagation();
+                }}
                 onDoubleClick={(e) => {
                   e.stopPropagation();
+                  e.preventDefault();
+                  if (node.editLocked || node.locked) return;
                   setDraft(node.title);
-                  editingRef.current?.focus();
+                  setEditingTitle(true);
                 }}
               >
                 {node.title || <span className="text-zinc-500">Untitled</span>}
@@ -205,7 +237,7 @@ export const NodeView = memo(function NodeView({
             )}
             {node.subtitle && (
               <div
-                className="mt-1 line-clamp-2 text-xs leading-relaxed"
+                className="mt-1 line-clamp-2 text-xs leading-relaxed select-none pointer-events-none"
                 style={{ color: (node.color?.text ?? "#a1a1aa") + "cc" }}
               >
                 {node.subtitle}
@@ -213,7 +245,7 @@ export const NodeView = memo(function NodeView({
             )}
           </div>
 
-          <div className="flex flex-none items-center gap-1">
+          <div className="flex flex-none items-center gap-1 pointer-events-none">
             {node.status && node.status !== "none" && (
               <span
                 title={node.status}
@@ -230,7 +262,7 @@ export const NodeView = memo(function NodeView({
 
         {node.description && (
           <div
-            className="line-clamp-3 text-xs leading-relaxed"
+            className="line-clamp-3 text-xs leading-relaxed select-none pointer-events-none"
             style={{ color: (node.color?.text ?? "#a1a1aa") + "cc" }}
           >
             {node.description}
@@ -242,7 +274,7 @@ export const NodeView = memo(function NodeView({
         ) : null}
 
         {node.progress != null && (
-          <div className="mt-auto">
+          <div className="mt-auto pointer-events-none select-none">
             <div className="mb-1 flex items-center justify-between text-[10px] uppercase tracking-widest text-zinc-400">
               <span>Progress</span>
               <span>{Math.round(node.progress * 100)}%</span>
@@ -259,7 +291,7 @@ export const NodeView = memo(function NodeView({
           </div>
         )}
 
-        <div className="mt-auto flex items-end justify-between gap-2">
+        <div className="mt-auto flex items-end justify-between gap-2 pointer-events-none select-none">
           <div className="flex flex-wrap items-center gap-1">
             {tagList.slice(0, 4).map((t) => (
               <span
@@ -295,22 +327,26 @@ export const NodeView = memo(function NodeView({
             style={{ background: stroke }}
             data-port="top"
             title="Link from top"
+            onPointerDown={(e) => e.stopPropagation()}
           />
           <div
             className="absolute right-0 top-1/2 h-3 w-3 translate-x-1/2 -translate-y-1/2 cursor-crosshair rounded-full border border-white/50"
             style={{ background: stroke }}
             data-port="right"
             title="Drag to connect"
+            onPointerDown={(e) => e.stopPropagation()}
           />
           <div
             className="absolute bottom-0 left-1/2 h-3 w-3 -translate-x-1/2 translate-y-1/2 cursor-crosshair rounded-full border border-white/50"
             style={{ background: stroke }}
             data-port="bottom"
+            onPointerDown={(e) => e.stopPropagation()}
           />
           <div
             className="absolute left-0 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 cursor-crosshair rounded-full border border-white/50"
             style={{ background: stroke }}
             data-port="left"
+            onPointerDown={(e) => e.stopPropagation()}
           />
         </>
       )}
@@ -320,6 +356,7 @@ export const NodeView = memo(function NodeView({
           className="absolute -bottom-1 -right-1 h-4 w-4 cursor-nwse-resize rounded-full border-2 border-cyan-300 bg-black"
           title="Drag to resize"
           data-resize="se"
+          onPointerDown={(e) => e.stopPropagation()}
         />
       )}
 
@@ -368,6 +405,7 @@ function ChecklistView({
           key={c.id}
           className="flex items-center gap-2 text-xs"
           style={{ color: textColor + "dd" }}
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
         >
           <input
@@ -388,6 +426,7 @@ function ChecklistView({
       )}
       {adding ? (
         <form
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
           onSubmit={(e) => {
             e.preventDefault();
@@ -412,6 +451,7 @@ function ChecklistView({
         </form>
       ) : (
         <button
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             setAdding(true);

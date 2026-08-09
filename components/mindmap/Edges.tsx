@@ -3,6 +3,7 @@
 import { memo } from "react";
 import type { MMEdge, MMNode } from "./types";
 import { bezierPoints, nearestAnchor } from "./engine";
+import { actions } from "./store";
 
 interface Props {
   edges: MMEdge[];
@@ -11,6 +12,8 @@ interface Props {
   hoveredId?: string;
   selectedIds: string[];
   tempEdge?: { from: string; toX: number; toY: number };
+  width: number;
+  height: number;
 }
 
 export const EdgesLayer = memo(function EdgesLayer({
@@ -20,12 +23,14 @@ export const EdgesLayer = memo(function EdgesLayer({
   hoveredId,
   selectedIds,
   tempEdge,
+  width,
+  height,
 }: Props) {
   const defsId = `mm-marker-${worldId}`;
   return (
     <svg
-      className="pointer-events-none absolute inset-0 overflow-visible"
-      style={{ width: 0, height: 0 }}
+      className="pointer-events-none absolute left-0 top-0"
+      style={{ width, height, overflow: "visible" }}
     >
       <defs>
         <marker
@@ -80,12 +85,7 @@ export const EdgesLayer = memo(function EdgesLayer({
                 style={{ cursor: "pointer" }}
                 onPointerDown={(ev) => {
                   ev.stopPropagation();
-                  (ev.target as Element).dispatchEvent(
-                    new CustomEvent("mm-edge-click", {
-                      bubbles: true,
-                      detail: { id: e.id, shift: ev.shiftKey },
-                    }),
-                  );
+                  actions.selectEdge(e.id, ev.shiftKey);
                 }}
               />
               <path

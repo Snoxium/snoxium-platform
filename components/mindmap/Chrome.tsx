@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { actions, useStore } from "./store";
-import type { MMNode, NodeKind, NodeStatus, MMProject } from "./types";
+import type { MMEdge, MMNode, NodeKind, NodeStatus, MMProject } from "./types";
 import { PALETTE, colorForString, projectStats, uid } from "./engine";
 import { download, exportSVG, toCSV, toMarkdown, toOPML, toPlainText, exportPNG } from "./exporters";
 
@@ -482,7 +482,12 @@ export function Inspector() {
   const project = useStore((s) => s.project);
   const ui = useStore((s) => s.ui);
   const id = ui.selectedNodeIds[0];
+  const eid = ui.selectedEdgeIds[0];
   const n = id ? project.nodes[id] : null;
+  const e = eid ? project.edges[eid] : null;
+  if (e) {
+    return <EdgeInspector key={e.id} edge={e} nodesById={project.nodes} />;
+  }
   if (!n) {
     return (
       <div className="flex h-full flex-col gap-4 p-4 text-xs text-zinc-400">
@@ -490,14 +495,14 @@ export function Inspector() {
           Inspector
         </div>
         <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 leading-relaxed">
-          Select a node to edit its properties, or open search to jump anywhere.
+          Select a node or edge to edit its properties, or open search to jump anywhere.
           <div className="mt-3 space-y-1 text-[11px]">
             <div>• Double-click canvas: create node</div>
             <div>• Drag from node ports: connect</div>
-            <div>• Space+drag / middle-mouse: pan</div>
-            <div>• Ctrl+scroll: zoom</div>
-            <div>• Ctrl+F: search</div>
-            <div>• Ctrl+P: commands</div>
+            <div>• Space+drag / middle-mouse / right-drag: pan</div>
+            <div>• Scroll (wheel): zoom at cursor</div>
+            <div>• Shift+scroll: pan</div>
+            <div>• Ctrl+F: search · Ctrl+P: commands</div>
           </div>
         </div>
         <StatsPanel />
@@ -514,6 +519,7 @@ function InspectorBody({
   node: MMNode;
   tagsById: Record<string, { id: string; name: string; color: string }>;
 }) {
+  const project = useStore((s) => s.project);
   const n = node;
   return (
     <div className="flex h-full flex-col gap-3 overflow-y-auto p-4 text-xs">
@@ -686,7 +692,7 @@ function InspectorBody({
             Enter →
           </button>
         </div>
-        <PortalPicker nodeId={n.id} project={useStore((s) => s.project)} />
+        <PortalPicker nodeId={n.id} project={project} />
       </Field>
 
       <Field label="Linked Clone">
@@ -719,6 +725,176 @@ function InspectorBody({
               />
             </label>
           ))}
+        </div>
+      </Field>
+    </div>
+  );
+}
+
+function EdgeInspector({
+  edge,
+  nodesById,
+}: {
+  edge: MMEdge;
+  nodesById: Record<string, MMNode>;
+}) {
+  const fromN = nodesById[edge.from];
+  const toN = nodesById[edge.to];
+  return (
+    <div className="flex h-full flex-col gap-3 overflow-y-auto p-4 text-xs">
+      <div className="flex items-center justify-between">
+        <div className="text-[10px] font-medium uppercase tracking-widest text-zinc-500">
+          Edge · {edge.direction ?? "forward"}
+        </div>
+        <button
+          onClick={() => actions.deleteEdges([edge.id])}
+          className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-zinc-200 hover:bg-red-500/20"
+        >
+          🗑 Delete
+        </button>
+      </div>
+      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-[11px] leading-relaxed text-zinc-300">
+        <div>
+          From: <span className="font-mono text-cyan-200">{fromN?.title ?? "—"}</span>
+        </div>
+        <div>
+          To: <span className="font-mono text-cyan-200">{toN?.title ?? "—"}</span>
+        </div>
+      </div>
+      <Field label="Label">
+        <input
+          className="input"
+          value={edge.label ?? ""}
+          onChange={(e) => actions.updateEdge(edge.id, { label: e.target.value })}
+          placeholder="Edge label shown on the line"
+        />
+      </Field>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Style">
+          <select
+            className="input"
+            value={edge.style ?? "bezier"}
+            onChange={(e) =>
+              actions.updateEdge(edge.id, {
+                style: e.target.value as "bezier" | "straight" | "orthogonal",
+              })
+            }
+          >
+            <option value="bezier">Bézier</option>
+            <option value="straight">Straight</option>
+            <option value="orthogonal">Orthogonal</option>
+          </select>
+        </Field>
+        <Field label="Direction">
+          <select
+            className="input"
+            value={edge.direction ?? "forward"}
+            onChange={(e) =>
+              actions.updateEdge(edge.id, {
+                direction: e.target.value as "forward" | "back" | "both" | "none",
+              })
+            }
+          >
+            <option value="forward">Forward →</option>
+            <option value="back">Back ←</option>
+            <option value="both">Both ↔</option>
+            <option value="none">None —</option>
+          </select>
+        </Field>
+        <Field label="Thickness">
+          <input
+            type="range"
+            min={1}
+            max={10}
+            step={1}
+            value={edge.thickness ?? 2}
+            onChange={(e) =>
+              actions.updateEdge(edge.id, { thickness: Number(e.target.value) })
+            }
+            className="accent-cyan-400"
+          />
+          <div className="text-[10px] text-zinc-500">{edge.thickness ?? 2}px</div>
+        </Field>
+        <Field label="Stroke">
+          <div className="flex items-center gap-1">
+            {["#64748b", "#22d3ee", "#a78bfa", "#f472b6", "#fb7185", "#fbbf24", "#34d399"].map(
+              (c) => {
+                const on = (edge.color ?? "#64748b") === c;
+                return (
+                  <button
+                    key={c}
+                    onClick={() => actions.updateEdge(edge.id, { color: c })}
+                    title={c}
+                    className={
+                      "h-6 w-6 rounded-md border " +
+                      (on
+                        ? "ring-2 ring-cyan-400/60 border-cyan-400/40"
+                        : "border-white/10")
+                    }
+                    style={{ background: c }}
+                  />
+                );
+              },
+            )}
+            <input
+              type="color"
+              className="h-6 w-6 rounded-md border border-white/10"
+              value={edge.color ?? "#64748b"}
+              onChange={(e) => actions.updateEdge(edge.id, { color: e.target.value })}
+            />
+          </div>
+        </Field>
+      </div>
+      <label className="flex items-center gap-2 text-[11px] text-zinc-300">
+        <input
+          type="checkbox"
+          checked={!!edge.dashed}
+          onChange={(e) => actions.updateEdge(edge.id, { dashed: e.target.checked })}
+          className="accent-cyan-400"
+        />
+        Dashed line
+      </label>
+      <label className="flex items-center gap-2 text-[11px] text-zinc-300">
+        <input
+          type="range"
+          min={0}
+          max={10}
+          value={edge.weight ?? 0}
+          onChange={(e) => actions.updateEdge(edge.id, { weight: Number(e.target.value) })}
+          className="accent-cyan-400"
+        />
+        Weight ({edge.weight ?? 0})
+      </label>
+      <Field label="From / To">
+        <div className="grid grid-cols-2 gap-1.5">
+          <select
+            className="input"
+            value={edge.from}
+            onChange={(e) =>
+              actions.updateEdge(edge.id, { from: e.target.value })
+            }
+          >
+            {Object.values(nodesById)
+              .filter((n) => n.worldId === edge.worldId)
+              .map((n) => (
+                <option key={n.id} value={n.id}>
+                  {n.title || "—"}
+                </option>
+              ))}
+          </select>
+          <select
+            className="input"
+            value={edge.to}
+            onChange={(e) => actions.updateEdge(edge.id, { to: e.target.value })}
+          >
+            {Object.values(nodesById)
+              .filter((n) => n.worldId === edge.worldId)
+              .map((n) => (
+                <option key={n.id} value={n.id}>
+                  {n.title || "—"}
+                </option>
+              ))}
+          </select>
         </div>
       </Field>
     </div>

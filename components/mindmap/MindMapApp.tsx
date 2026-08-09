@@ -60,12 +60,17 @@ function FloatingHelp() {
       <div className="mb-1 text-[10px] font-medium uppercase tracking-widest text-zinc-500">
         Quick tips
       </div>
-      <div>• <span className="text-zinc-200">Double-click</span> canvas → new node</div>
+      <div>• <span className="text-zinc-200">Double-click</span> canvas → new node at cursor</div>
       <div>• <span className="text-zinc-200">Drag port dots</span> → connect nodes</div>
-      <div>• <span className="text-zinc-200">Space + drag</span> / middle-mouse / touch → pan</div>
-      <div>• <span className="text-zinc-200">Ctrl + scroll</span> → cursor-centered zoom</div>
+      <div>• <span className="text-zinc-200">Space + drag</span> / middle / right-mouse / touch → pan</div>
+      <div>• <span className="text-zinc-200">Scroll (wheel)</span> → zoom at cursor</div>
+      <div>• <span className="text-zinc-200">Shift + scroll</span> → pan page</div>
       <div>• <span className="text-zinc-200">Shift + drag</span> → multiselect / marquee</div>
-      <div>• <span className="text-zinc-200">Tab</span> → child node connected to selection</div>
+      <div>• <span className="text-zinc-200">N</span> → new node at viewport center</div>
+      <div>• <span className="text-zinc-200">Tab</span> → child connected node</div>
+      <div>• <span className="text-zinc-200">Enter</span> → sibling connected node</div>
+      <div>• <span className="text-zinc-200">Delete</span> / Backspace → remove selection</div>
+      <div>• <span className="text-zinc-200">Ctrl+L</span> link · <span className="text-zinc-200">Ctrl+D</span> dup · <span className="text-zinc-200">=</span>/<span className="text-zinc-200">-</span> zoom</div>
       <div>• <span className="text-zinc-200">Ctrl+F</span> search · <span className="text-zinc-200">Ctrl+P</span> commands · <span className="text-zinc-200">Ctrl+G</span> layout</div>
     </div>
   );
