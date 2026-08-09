@@ -327,7 +327,7 @@ export function Minimap() {
         drag.current = { lastX: mx, lastY: my };
         const wx = -dmx / Math.max(0.0001, sc);
         const wy = -dmy / Math.max(0.0001, sc);
-        actions.nudgeCamera(wx * camera.zoom, wy * camera.zoom);
+        actions.nudgeCamera(-wx * camera.zoom, -wy * camera.zoom);
       }}
       onPointerUp={(e) => {
         drag.current = null;

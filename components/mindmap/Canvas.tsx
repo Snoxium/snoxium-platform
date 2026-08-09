@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { beginUndoGroup, endUndoGroup, setViewportSize, actions, useStore, getState } from "./store";
+import { beginUndoGroup, endUndoGroup, setViewportSize, actions, useStore, getState, bumpVersion } from "./store";
 import type { MMNode } from "./types";
 import { NodeView } from "./Node";
 import { EdgesLayer } from "./Edges";
@@ -15,6 +15,27 @@ export function Canvas() {
   const [_version, setVersion] = useState(0);
   const size = useStore(() => 1);
   void size;
+
+  // Hybrid zoom mode:
+  // - When zoom is changing (wheel, +/-, slider) -> transform scale (pure GPU, no layout reflow = fast)
+  // - After 250ms of zoom inactivity -> snap to CSS zoom (re-layouts text glyphs = pixel-perfect crisp)
+  const zoomRef = useRef<"gpu" | "crisp">("crisp");
+  const zoomIdleTimer = useRef<number | null>(null);
+  const lastCameraZoomSeen = useRef<number>(camera.zoom);
+
+  const kickZoomDirty = useCallback(() => {
+    zoomRef.current = "gpu";
+    if (zoomIdleTimer.current != null) window.clearTimeout(zoomIdleTimer.current);
+    zoomIdleTimer.current = window.setTimeout(() => {
+      zoomRef.current = "crisp";
+      setVersion((x) => x + 1);
+    }, 220);
+  }, []);
+
+  if (Math.abs(lastCameraZoomSeen.current - camera.zoom) > 1e-6) {
+    lastCameraZoomSeen.current = camera.zoom;
+    kickZoomDirty();
+  }
 
   const settings = project.settings;
   const [hoveredId, setHoveredId] = useState<string | undefined>();
@@ -320,7 +341,7 @@ export function Canvas() {
     const wp = screenToWorld(sx, sy, camera.x, camera.y, camera.zoom);
 
     if (st.mode === "pan") {
-      actions.nudgeCamera(dx, dy);
+      actions.nudgeCamera(-dx, -dy);
       return;
     }
     if (st.mode === "connect" && st.connectingFrom) {
@@ -340,35 +361,55 @@ export function Canvas() {
         if (sst.mode === "nodes" && sst.origPos) {
           const wdx = (ssx - sst.startX) / camera.zoom;
           const wdy = (ssy - sst.startY) / camera.zoom;
-          const updates: Array<[string, number, number]> = [];
+          let any = false;
           for (const [id, orig] of sst.origPos) {
             const n = project.nodes[id];
             if (!n || n.locked) continue;
             const nx = snap(orig.x + wdx);
             const ny = snap(orig.y + wdy);
-            if (n.x !== nx || n.y !== ny) updates.push([id, nx, ny]);
-          }
-          if (updates.length) {
-            for (const [id, nx, ny] of updates) {
-              const n = project.nodes[id];
+            if (n.x !== nx || n.y !== ny) {
               n.x = nx;
               n.y = ny;
               n.updated = Date.now();
+              any = true;
             }
-            setVersion((x) => x + 1);
-            actions.saveNow();
           }
+          if (any) bumpVersion();
         } else if (sst.mode === "resize" && sst.nodeId && sst.origSize) {
-          const wdx = dx / camera.zoom;
-          const wdy = dy / camera.zoom;
+          const wdx = (ssx - sst.startX) / camera.zoom;
+          const wdy = (ssy - sst.startY) / camera.zoom;
           const n = project.nodes[sst.nodeId];
-          const nw = Math.max(80, sst.origSize.w + wdx);
-          const nh = Math.max(60, sst.origSize.h + wdy);
-          if (n && (Math.abs(nw - n.w) > 0.1 || Math.abs(nh - n.h) > 0.1)) {
+          if (!n || n.locked) return;
+          const { x: ox, y: oy, w: ow, h: oh } = sst.origSize;
+          const handle = sst.resizeHandle ?? "se";
+          let nx = ox,
+            ny = oy,
+            nw = ow,
+            nh = oh;
+          if (handle.includes("e")) nw = Math.max(80, ow + wdx);
+          if (handle.includes("s")) nh = Math.max(60, oh + wdy);
+          if (handle.includes("w")) {
+            const newW = Math.max(80, ow - wdx);
+            nx = ox + (ow - newW);
+            nw = newW;
+          }
+          if (handle.includes("n")) {
+            const newH = Math.max(60, oh - wdy);
+            ny = oy + (oh - newH);
+            nh = newH;
+          }
+          if (
+            Math.abs(nx - n.x) > 0.1 ||
+            Math.abs(ny - n.y) > 0.1 ||
+            Math.abs(nw - n.w) > 0.1 ||
+            Math.abs(nh - n.h) > 0.1
+          ) {
+            n.x = nx;
+            n.y = ny;
             n.w = nw;
             n.h = nh;
             n.updated = Date.now();
-            setVersion((x) => x + 1);
+            bumpVersion();
           }
         } else if (sst.mode === "marquee") {
           actions.setMarquee({ x1: sst.startX, y1: sst.startY, x2: ssx, y2: ssy });
@@ -434,7 +475,7 @@ export function Canvas() {
           inertiaRef.current = null;
           return;
         }
-        actions.nudgeCamera(st.vx, st.vy);
+        actions.nudgeCamera(-st.vx, -st.vy);
         st.vx *= 0.93;
         st.vy *= 0.93;
         inertiaRef.current = requestAnimationFrame(doInertia);
@@ -548,12 +589,22 @@ export function Canvas() {
 
       <div
         className="absolute left-0 top-0 will-change-transform"
-        style={{
-          transform: `translate3d(${camera.x}px, ${camera.y}px, 0) scale(${camera.zoom})`,
-          transformOrigin: "0 0",
-          width: `${dims.w}px`,
-          height: `${dims.h}px`,
-        }}
+        style={
+          zoomRef.current === "crisp"
+            ? {
+                zoom: camera.zoom,
+                transform: `translate3d(${Math.round(camera.x / camera.zoom)}px, ${Math.round(camera.y / camera.zoom)}px, 0)`,
+                transformOrigin: "0 0",
+                width: `${dims.w}px`,
+                height: `${dims.h}px`,
+              }
+            : {
+                transform: `translate3d(${Math.round(camera.x)}px, ${Math.round(camera.y)}px, 0) scale(${camera.zoom})`,
+                transformOrigin: "0 0",
+                width: `${dims.w}px`,
+                height: `${dims.h}px`,
+              }
+        }
       >
         <EdgesLayer
           edges={visibleEdges}

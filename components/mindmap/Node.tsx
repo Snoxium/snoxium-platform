@@ -53,18 +53,16 @@ const statusDot: Record<NonNullable<MMNode["status"]>, string> = {
   blocked: "#fb7185",
 };
 
-export const NodeView = memo(function NodeView({
-  node,
-  selected,
-  hovered,
-  tagsById,
-}: Props) {
-  const isSingleSelected = useStore(
-    (s) => s.ui.selectedNodeIds.length === 1 && s.ui.selectedNodeIds[0] === node.id,
-  );
-  const [editingTitle, setEditingTitle] = useState(false);
-  const [draft, setDraft] = useState(node.title);
-  const titleRef = useRef<HTMLTextAreaElement | null>(null);
+export const NodeView = memo(
+  function NodeView({
+    node,
+    selected,
+    hovered,
+    tagsById,
+  }: Props) {
+    const [editingTitle, setEditingTitle] = useState(false);
+    const [draft, setDraft] = useState(node.title);
+    const titleRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     setDraft(node.title);
@@ -128,8 +126,6 @@ export const NodeView = memo(function NodeView({
   const tagList = (node.tags ?? [])
     .map((id) => tagsById[id])
     .filter(Boolean) as MMTag[];
-
-  void isSingleSelected;
 
   return (
     <div
@@ -229,6 +225,10 @@ export const NodeView = memo(function NodeView({
                 onDoubleClick={(e) => {
                   e.stopPropagation();
                   e.preventDefault();
+                  if (node.isWorld && node.childWorldId) {
+                    actions.enterWorld(node.childWorldId);
+                    return;
+                  }
                   if (node.editLocked || node.locked) return;
                   setDraft(node.title);
                   setEditingTitle(true);
@@ -387,7 +387,47 @@ export const NodeView = memo(function NodeView({
       )}
     </div>
   );
-});
+},
+  (prev, next) => {
+    const a = prev.node;
+    const b = next.node;
+    return (
+      prev.selected === next.selected &&
+      prev.hovered === next.hovered &&
+      prev.tagsById === next.tagsById &&
+      a.id === b.id &&
+      a.x === b.x &&
+      a.y === b.y &&
+      a.w === b.w &&
+      a.h === b.h &&
+      a.kind === b.kind &&
+      a.title === b.title &&
+      a.subtitle === b.subtitle &&
+      a.description === b.description &&
+      a.status === b.status &&
+      a.priority === b.priority &&
+      a.progress === b.progress &&
+      a.due === b.due &&
+      a.color?.fill === b.color?.fill &&
+      a.color?.stroke === b.color?.stroke &&
+      a.color?.text === b.color?.text &&
+      a.isWorld === b.isWorld &&
+      a.isPortal === b.isPortal &&
+      a.editLocked === b.editLocked &&
+      a.locked === b.locked &&
+      a.favorite === b.favorite &&
+      a.pinned === b.pinned &&
+      a.notes === b.notes &&
+      a.childWorldId === b.childWorldId &&
+      a.portalTarget === b.portalTarget &&
+      a.shape === b.shape &&
+      (a.tags?.length ?? 0) === (b.tags?.length ?? 0) &&
+      (a.checklist?.length ?? 0) === (b.checklist?.length ?? 0) &&
+      a.updated === b.updated &&
+      a.opacity === b.opacity
+    );
+  },
+);
 
 function ChecklistView({
   nodeId,

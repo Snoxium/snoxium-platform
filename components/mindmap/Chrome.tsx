@@ -18,37 +18,33 @@ export function Toolbar() {
 
   return (
     <div className="relative z-50 flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-black/30 p-2 backdrop-blur">
-        <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/[0.04] px-2 py-1">
-          <span className="text-lg">{world?.emoji ?? "🌐"}</span>
+      <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto rounded-2xl border border-white/10 bg-black/30 p-2 backdrop-blur">
+        <div className="flex shrink-0 items-center gap-1 rounded-xl border border-white/10 bg-white/[0.04] px-2 py-1">
+          <span className="text-base">{world?.emoji ?? "🌐"}</span>
           <input
             value={world?.name ?? ""}
             onChange={(e) => actions.renameWorld(project.currentWorldId, e.target.value, world?.emoji)}
-            className="w-40 bg-transparent text-sm font-semibold text-zinc-100 outline-none placeholder:text-zinc-500"
+            className="w-32 bg-transparent text-xs font-semibold text-zinc-100 outline-none placeholder:text-zinc-500"
             placeholder="World name"
           />
         </div>
         {parentWorld && (
           <button
             onClick={() => actions.leaveToParentWorld()}
-            className="inline-flex items-center gap-1 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-zinc-200 hover:bg-white/[0.08]"
+            className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-white/10 bg-white/[0.04] px-2 py-1.5 text-[11px] text-zinc-200 hover:bg-white/[0.08]"
             title="Go to parent world"
           >
-            ← {parentWorld.emoji} {parentWorld.name}
+            ← {parentWorld.emoji} {parentWorld.name.length > 14 ? parentWorld.name.slice(0, 14) + "…" : parentWorld.name}
           </button>
         )}
 
-        <div className="mx-2 h-5 w-px bg-white/10" />
+        <div className="mx-1 shrink-0 h-5 w-px bg-white/10" />
 
-        <ToolBtn onClick={() => actions.resetCamera()} title="Home (H)">
-          🏠 Home
-        </ToolBtn>
-        <ToolBtn onClick={() => actions.fitSelection()} title="Fit selection (F)">
-          🎯 Fit
-        </ToolBtn>
+        <ToolBtn onClick={() => actions.resetCamera()} title="Home (H)">🏠</ToolBtn>
+        <ToolBtn onClick={() => actions.fitSelection()} title="Fit selection (F)">🎯 Fit</ToolBtn>
         <ZoomControls zoom={camera.zoom} />
 
-        <div className="mx-2 h-5 w-px bg-white/10" />
+        <div className="mx-1 shrink-0 h-5 w-px bg-white/10" />
 
         <AddMenu onPick={(kind) => {
           const { x, y } = { x: -camera.x / camera.zoom, y: -camera.y / camera.zoom };
@@ -64,7 +60,6 @@ export function Toolbar() {
                 { id: uid(), text: "Item 2", done: true },
               ],
             });
-          setMenu(null);
         }} />
 
         <ToolBtn
@@ -72,7 +67,7 @@ export function Toolbar() {
           disabled={!ui.selectedNodeIds.length}
           title="Duplicate (Ctrl+D)"
         >
-          ⎘ Dupe
+          ⎘
         </ToolBtn>
         <ToolBtn
           onClick={() => actions.deleteNodes(ui.selectedNodeIds)}
@@ -86,45 +81,25 @@ export function Toolbar() {
           disabled={ui.selectedNodeIds.length < 2}
           title="Connect selected"
         >
-          🔗 Link
+          🔗
         </ToolBtn>
 
-        <div className="mx-2 h-5 w-px bg-white/10" />
+        <div className="mx-1 shrink-0 h-5 w-px bg-white/10" />
 
-        <ToolBtn onClick={() => actions.undo()} title="Undo (Ctrl+Z)">
-          ↶ Undo
-        </ToolBtn>
-        <ToolBtn onClick={() => actions.redo()} title="Redo (Ctrl+Y)">
-          ↷ Redo
-        </ToolBtn>
+        <ToolBtn onClick={() => actions.undo()} title="Undo (Ctrl+Z)">↶</ToolBtn>
+        <ToolBtn onClick={() => actions.redo()} title="Redo (Ctrl+Y)">↷</ToolBtn>
 
-        <div className="mx-2 h-5 w-px bg-white/10" />
+        <div className="mx-1 shrink-0 h-5 w-px bg-white/10" />
 
         <ToolBtn onClick={() => actions.setAtlas(!ui.atlasOpen)} active={ui.atlasOpen} title="Atlas / Worlds">
-          🗺 Atlas
-        </ToolBtn>
-        <ToolBtn onClick={() => actions.setSearch(true, "")} title="Search (Ctrl+F, Ctrl+K)">
-          🔍
-        </ToolBtn>
-        <ToolBtn onClick={() => actions.setCommandPalette(true)} title="Command palette (Ctrl+P)">
-          ⌘
+          🗺
         </ToolBtn>
         <ToolBtn onClick={() => actions.setInspector(!ui.inspectorOpen)} active={ui.inspectorOpen} title="Inspector">
-          ⚙
+          🧩
         </ToolBtn>
-
-        <div className="mx-2 h-5 w-px bg-white/10" />
-
         <SettingsMenu />
         <ExportMenu />
         <ImportBtn />
-
-        <div className="ml-auto flex items-center gap-2 text-[11px] text-zinc-400">
-          <span title="Nodes">{stats.totalNodes}📦</span>
-          <span title="Edges">{stats.totalEdges}🔗</span>
-          <span title="Worlds">{stats.totalWorlds}🌐</span>
-          <span title="Open / Done tasks">{stats.openTasks}⏳ / {stats.completedTasks}✅</span>
-        </div>
       </div>
     </div>
   );
@@ -143,7 +118,7 @@ function ToolBtn(props: {
       title={props.title}
       disabled={props.disabled}
       className={
-        "inline-flex items-center gap-1 rounded-xl border px-3 py-1.5 text-xs font-medium transition " +
+        "inline-flex shrink-0 items-center gap-1 rounded-xl border px-2.5 py-1.5 text-[11px] font-medium transition " +
         (props.disabled
           ? "cursor-not-allowed border-white/5 bg-white/[0.02] text-zinc-600"
           : props.active
@@ -159,10 +134,11 @@ function ToolBtn(props: {
 function ZoomControls({ zoom }: { zoom: number }) {
   const pct = Math.round(zoom * 100);
   return (
-    <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-2 py-1">
+    <div className="flex shrink-0 items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-2 py-1">
       <button
         onClick={() => actions.setZoom(zoom * 0.8)}
-        className="h-6 w-6 rounded-md text-zinc-200 hover:bg-white/10"
+        className="h-5 w-5 rounded-md text-zinc-200 hover:bg-white/10"
+        title="Zoom out"
       >
         −
       </button>
@@ -172,15 +148,16 @@ function ZoomControls({ zoom }: { zoom: number }) {
         max={800}
         value={pct}
         onChange={(e) => actions.setZoom(Number(e.target.value) / 100)}
-        className="w-28 accent-cyan-400"
+        className="w-20 accent-cyan-400"
       />
       <button
         onClick={() => actions.setZoom(zoom * 1.2)}
-        className="h-6 w-6 rounded-md text-zinc-200 hover:bg-white/10"
+        className="h-5 w-5 rounded-md text-zinc-200 hover:bg-white/10"
+        title="Zoom in"
       >
         +
       </button>
-      <span className="w-12 text-right font-mono text-[11px] text-cyan-300">{pct}%</span>
+      <span className="w-10 shrink-0 text-right font-mono text-[10px] text-cyan-300">{pct}%</span>
     </div>
   );
 }
@@ -205,7 +182,7 @@ function AddMenu({ onPick }: { onPick: (k: NodeKind) => void }) {
             className="fixed inset-0 z-40"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute left-0 top-full z-50 mt-2 grid w-56 grid-cols-2 gap-1 rounded-2xl border border-white/10 bg-[#0b0b12] p-2 shadow-2xl">
+          <div className="absolute left-0 top-full z-50 mt-2 grid w-52 grid-cols-1 gap-1 rounded-2xl border border-white/10 bg-[#0b0b12] p-2 shadow-2xl">
             {items.map((it) => (
               <button
                 key={it.kind}
@@ -279,6 +256,13 @@ function SettingsMenu() {
               >
                 📸 Take snapshot
               </button>
+              <SnapshotsPicker />
+              <button
+                className="mt-1 w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 hover:bg-white/10"
+                onClick={() => actions.saveNow()}
+              >
+                💾 Save now
+              </button>
               <button
                 className="mt-1 w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 hover:bg-white/10"
                 onClick={() => {
@@ -346,6 +330,7 @@ function SwitchRow({ label, on, onChange }: { label: string; on: boolean; onChan
 
 function ExportMenu() {
   const [open, setOpen] = useState(false);
+  const [ok, setOk] = useState(false);
   const project = useStore((s) => s.project);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const nodesRootRef = useRef<HTMLElement | null>(null);
@@ -400,11 +385,13 @@ function ExportMenu() {
         else alert("Canvas not ready");
         break;
     }
+    setOk(true);
+    setTimeout(() => setOk(false), 1500);
     setOpen(false);
   };
   return (
     <div className="relative">
-      <ToolBtn onClick={() => setOpen((o) => !o)}>⬇ Export</ToolBtn>
+      <ToolBtn onClick={() => setOpen((o) => !o)}>{ok ? `✓ Exported` : `⬇ Export`}</ToolBtn>
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
@@ -453,6 +440,8 @@ function ImportBtn() {
           r.onload = () => {
             try {
               actions.importJSON(String(r.result));
+              setOk(true);
+              setTimeout(() => setOk(false), 1500);
             } catch (err: any) {
               alert("Import failed: " + (err?.message ?? String(err)));
             }
@@ -462,7 +451,7 @@ function ImportBtn() {
         }}
       />
       <ToolBtn onClick={() => inputRef.current?.click()} title="Import JSON">
-        ⬆ Import
+        {ok ? `✓ Imported` : `⬆ Import`}
       </ToolBtn>
     </>
   );
@@ -1057,6 +1046,57 @@ function PortalPicker({ nodeId, project }: { nodeId: string; project: MMProject 
           </option>
         ))}
       </select>
+    </div>
+  );
+}
+
+function SnapshotsPicker() {
+  const [open, setOpen] = useState(false);
+  const [list, setList] = useState<Array<{ id: string; name: string; ts: number; data: string }>>([]);
+  useEffect(() => {
+    if (open) setList(actions.listSnapshots());
+  }, [open]);
+  if (!open) {
+    return (
+      <button
+        className="mt-1 w-full rounded-lg border border-amber-400/20 bg-amber-400/10 px-3 py-1.5 text-amber-200 hover:bg-amber-400/20"
+        onClick={() => setOpen(true)}
+      >
+        ⏮ Restore snapshot
+      </button>
+    );
+  }
+  return (
+    <div className="mt-1 space-y-1 rounded-lg border border-white/10 bg-white/[0.02] p-2">
+      <div className="flex items-center justify-between px-1">
+        <div className="text-[10px] uppercase tracking-widest text-zinc-500">Snapshots ({list.length})</div>
+        <button className="text-zinc-500 hover:text-zinc-200" onClick={() => setOpen(false)}>×</button>
+      </div>
+      {!list.length ? (
+        <div className="px-1 py-3 text-center text-[11px] text-zinc-500">No snapshots yet. Take one above.</div>
+      ) : (
+        <div className="max-h-40 space-y-0.5 overflow-y-auto">
+          {list.slice().reverse().map((s) => (
+            <div key={s.id} className="flex items-center gap-1 rounded-md px-1 py-1 hover:bg-white/5">
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[11px] text-zinc-200">{s.name}</div>
+                <div className="truncate text-[10px] text-zinc-500">{new Date(s.ts).toLocaleString()}</div>
+              </div>
+              <button
+                className="rounded border border-rose-400/20 bg-rose-400/5 px-1.5 py-0.5 text-[10px] text-rose-200 hover:bg-rose-400/10"
+                onClick={() => {
+                  if (confirm(`Restore "${s.name}"? Current unsaved state will be pushed to undo stack.`)) {
+                    actions.restoreSnapshot(s.id);
+                    setOpen(false);
+                  }
+                }}
+              >
+                Restore
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

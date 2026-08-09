@@ -363,6 +363,11 @@ export function getState(): StoreShape {
   return store;
 }
 
+export function bumpVersion() {
+  bump();
+  emit();
+}
+
 function setPartial(partial: Partial<StoreShape>) {
   Object.assign(store, partial);
   emit();
