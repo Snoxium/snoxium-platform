@@ -82,11 +82,11 @@ export function Canvas() {
       Object.values(getState().project.nodes)
         .filter((n) => n.worldId === worldId && !n.hidden)
         .map((n) => ({ ...n })),
-    [worldId, project.updated, project.currentWorldId],
+    [worldId, _version],
   );
   const visibleEdges = useMemo(
     () => Object.values(getState().project.edges).filter((e) => e.worldId === worldId),
-    [worldId, project.updated, project.currentWorldId],
+    [worldId, _version],
   );
   const nodesById = useMemo(() => {
     const m: Record<string, MMNode> = {};
@@ -319,8 +319,8 @@ export function Canvas() {
     (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
   };
 
-  let _raf = 0;
-  let _pendingMove: { sx: number; sy: number; e: null | React.PointerEvent } | null = null;
+  const _raf = useRef<number>(0);
+  const _pendingMove = useRef<{ sx: number; sy: number; e: null | React.PointerEvent } | null>(null);
 
   const onPointerMove = (e: React.PointerEvent) => {
     const el = containerRef.current;
@@ -368,11 +368,11 @@ export function Canvas() {
     }
 
     // Batch nodes/resize/marquee into RAF to drop duplicate commits
-    if (_pendingMove == null) {
-      _pendingMove = { sx, sy, e: null };
-      _raf = requestAnimationFrame(() => {
-        const p = _pendingMove!;
-        _pendingMove = null;
+    if (_pendingMove.current == null) {
+      _pendingMove.current = { sx, sy, e: null };
+      _raf.current = requestAnimationFrame(() => {
+        const p = _pendingMove.current!;
+        _pendingMove.current = null;
         const ssx = p.sx;
         const ssy = p.sy;
         const sst = dragState.current;
@@ -461,15 +461,15 @@ export function Canvas() {
         }
       });
     } else {
-      _pendingMove.sx = sx;
-      _pendingMove.sy = sy;
+      _pendingMove.current!.sx = sx;
+      _pendingMove.current!.sy = sy;
     }
   };
 
   const onPointerUp = (e: React.PointerEvent) => {
     const st = dragState.current;
-    if (_raf) cancelAnimationFrame(_raf);
-    _pendingMove = null;
+    if (_raf.current) cancelAnimationFrame(_raf.current); _raf.current = 0;
+    _pendingMove.current = null;
     try {
       (e.currentTarget as Element).releasePointerCapture?.(e.pointerId);
     } catch {}
