@@ -67,7 +67,7 @@ export function Footer() {
             Stardew Network, Lunar Fish, Trash Tycoon, Runalong.
           </p>
           <p className="text-xs text-zinc-200/50">
-            © {new Date().getFullYear()} Snoxium Games. All rights reserved.
+            © {new Date().getFullYear()} Snoxium Games Ltd. All rights reserved.
           </p>
         </div>
       </div>
