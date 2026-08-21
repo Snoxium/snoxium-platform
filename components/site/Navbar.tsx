@@ -2,6 +2,7 @@ import Link from "next/link";
 
 const NAV_LINKS = [
   { href: "/games", label: "Games" },
+  { href: "/minecraft/plugins", label: "Plugins" },
   { href: "/network", label: "Network" },
   { href: "/app/mindmap", label: "Mindmap" },
   { href: "/about", label: "About" },
