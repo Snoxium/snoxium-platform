@@ -162,6 +162,8 @@ export function createNode(
     updated: now,
     checklist: partial.checklist,
     attachments: partial.attachments,
+    textColors: partial.textColors,
+    linkPreviews: partial.linkPreviews ? structuredClone(partial.linkPreviews) : undefined,
     comments: partial.comments,
     custom: partial.custom,
     isWorld: partial.isWorld,
@@ -535,7 +537,7 @@ export const actions = {
     const viewport = viewportSizeRef.current ?? { w: 1200, h: 800 };
     actions.zoomAt(viewport.w / 2, viewport.h / 2, z, viewport);
   },
-  selectNode(id: string | string[] | null, additive = false) {
+  selectNode(id: string | string[] | null, additive = false, openInspector = true) {
     if (id == null) {
       setPartial({
         ui: { ...store.ui, selectedNodeIds: [], selectedEdgeIds: [] },
@@ -551,7 +553,7 @@ export const actions = {
         ...store.ui,
         selectedNodeIds: next,
         selectedEdgeIds: [],
-        inspectorOpen: next.length === 1 ? true : store.ui.inspectorOpen,
+        inspectorOpen: next.length === 1 && openInspector ? true : store.ui.inspectorOpen,
       },
     });
   },
@@ -594,6 +596,10 @@ export const actions = {
       worldId: p.currentWorldId,
       title: partial.title ?? "New Node",
       subtitle: partial.subtitle,
+      notes: partial.notes,
+      description: partial.description,
+      textColors: partial.textColors,
+      linkPreviews: partial.linkPreviews,
       kind,
       x: wx - (((partial.w as number) ?? 240) / 2),
       y: wy - (((partial.h as number) ?? 110) / 2),

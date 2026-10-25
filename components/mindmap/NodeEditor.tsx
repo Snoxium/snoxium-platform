@@ -4,11 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { actions, beginUndoGroup, endUndoGroup, useStore } from "./store";
 import { uid } from "./engine";
 import { MarkdownContent } from "./NodeContent";
+import { LinkPreviews } from "./LinkPreviews";
 import type { MMNode, NodeKind, NodeStatus } from "./types";
 
 export function NodeEditor({ node }: { node: MMNode }) {
   const worlds = useStore(s => s.project.worlds);
   const [preview, setPreview] = useState(false);
+  const [gradientStart, setGradientStart] = useState("#22d3ee");
+  const [gradientEnd, setGradientEnd] = useState("#c084fc");
   const undo = useRef<number | null>(null);
   const notesInput = useRef<HTMLTextAreaElement>(null);
   useEffect(() => () => { if (undo.current != null) endUndoGroup(undo.current); }, []);
@@ -57,8 +60,12 @@ export function NodeEditor({ node }: { node: MMNode }) {
       <section className="mm-editor-section">
         <div className="mm-panel-heading"><h3>Content</h3><button aria-pressed={preview} onClick={() => setPreview(v => !v)}>{preview ? "Edit Markdown" : "Preview Markdown"}</button></div>
         {!preview && node.kind !== "code" && <div className="mm-format-tools" aria-label="Markdown formatting"><button title="Bold" onClick={() => format("**", "**")}>B</button><button title="Italic" onClick={() => format("*", "*")}>I</button><button title="Heading" onClick={() => format("\n## ")}>H</button><button title="List" onClick={() => format("\n- ")}>List</button><button title="Link" onClick={() => format("[", "](https://example.com)", "link")}>Link</button><button title="Code" onClick={() => format("`", "`")}>Code</button></div>}
-        {preview ? <div className="mm-preview"><MarkdownContent text={notes || "*Nothing written yet.*"} /></div> : <label>{node.kind === "code" ? "Code" : "Notes (Markdown)"}<textarea ref={notesInput} aria-label="Node notes" rows={6} placeholder="**Bold**, *italic*, # heading, - list, [link](https://…)" value={notes} onChange={e => patch({ notes: e.target.value, description: e.target.value })} /></label>}
-        <details className="mm-help"><summary>Markdown formatting help</summary><p>Use **bold**, *italic*, ~~strike~~, # Headings, - lists, - [ ] tasks, `code`, fenced code blocks, links, and tables with | columns |.</p></details>
+        {preview ? <div className="mm-preview"><MarkdownContent text={notes || "*Nothing written yet.*"} textColors={node.textColors} /></div> : <label>{node.kind === "code" ? "Code" : "Notes (Markdown)"}<textarea ref={notesInput} aria-label="Node notes" rows={6} placeholder="**Bold**, *italic*, # heading, - list, [link](https://…)" value={notes} onChange={e => patch({ notes: e.target.value, description: e.target.value })} /></label>}
+        <details className="mm-help"><summary>Discord Markdown formatting help</summary><p>Use **bold**, *italic*, ***both***, __underline__, ~~strike~~ and ||spoilers||. Combine them: __***all three***__. Start lines with #, ## or ### for headings, -# for small subtext, &gt; for quotes, or &gt;&gt;&gt; for a quote continuing to the end. Lists, nested lists, tasks, `code`, fenced code blocks, masked links and tables work too. Escape formatting with a backslash. Pasted web links are clickable.</p></details>
+        <LinkPreviews key={node.id} node={{ ...node }} editor />
+        <label className="mm-check"><input type="checkbox" checked={!!node.textColors} onChange={e => patch({ textColors: e.target.checked })} />Enable Minecraft text colors</label>
+        {node.textColors && <div className="mm-text-color-tools"><p className="mm-muted">Use &amp;0–&amp;f, &amp;#RRGGBB, &amp;x&amp;R&amp;R&amp;G&amp;G&amp;B&amp;B or § codes. Birdflop’s per-letter hex gradients and MiniMessage &lt;gradient:#22d3ee:#c084fc&gt;text&lt;/gradient&gt; work. &amp;l bold, &amp;o italic, &amp;n underline, &amp;m strike, &amp;k obfuscate, &amp;r reset. Code stays literal.</p><div className="mm-color-grid"><label>Gradient start<input aria-label="Gradient start" type="color" value={gradientStart} onChange={e => setGradientStart(e.target.value)} /></label><label>Gradient end<input aria-label="Gradient end" type="color" value={gradientEnd} onChange={e => setGradientEnd(e.target.value)} /></label></div><button disabled={preview} onClick={() => format(`<gradient:${gradientStart}:${gradientEnd}>`, "</gradient>", "Gradient text")}>Apply gradient to selection</button></div>}
+        <p className="mm-muted">Discord timestamps: &lt;t:UNIX&gt; or &lt;t:UNIX:t/T/d/D/f/F/R&gt;. Dates use your local time; R updates automatically.</p>
         {node.kind === "checklist" && <div className="mm-task-editor">
           <p className="mm-muted">{node.checklist?.filter(i => i.done).length ?? 0} / {node.checklist?.length ?? 0} complete</p>
           {node.checklist?.map(item => <div className="mm-task-row" key={item.id}><input aria-label={`Complete ${item.text}`} type="checkbox" checked={item.done} onChange={e => actions.setChecklistItem(node.id, item.id, { done: e.target.checked })} /><input aria-label="Checklist item" value={item.text} onChange={e => actions.setChecklistItem(node.id, item.id, { text: e.target.value })} /><button onClick={() => actions.removeChecklistItem(node.id, item.id)} aria-label={`Remove ${item.text}`}>×</button></div>)}

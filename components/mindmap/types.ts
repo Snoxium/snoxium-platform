@@ -44,6 +44,15 @@ export interface ChecklistItem {
   done: boolean;
 }
 
+export interface LinkPreview {
+  title: string;
+  description: string;
+  siteName: string;
+  image?: string;
+  updatedAt: number;
+  hidden?: boolean;
+}
+
 export interface MMNode {
   id: string;
   worldId: string;
@@ -53,6 +62,8 @@ export interface MMNode {
   subtitle?: string;
   description?: string;
   notes?: string;
+  textColors?: boolean;
+  linkPreviews?: Record<string, LinkPreview>;
   kind: NodeKind;
   x: number;
   y: number;

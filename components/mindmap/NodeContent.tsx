@@ -1,13 +1,25 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { MMNode } from "./types";
+import { prepareDiscordMarkdown, remarkDiscord } from "./discordMarkdown";
+import { DiscordTimestamp } from "./DiscordTimestamp";
+import type { TimestampStyle } from "./timestamps";
 
-const plugins = [remarkGfm];
-export const MarkdownContent = memo(function MarkdownContent({ text }: { text: string }) {
-  return <div className="mm-markdown"><Markdown remarkPlugins={plugins} skipHtml components={{ a: ({ children, href }) => <a href={href} target="_blank" rel="noopener noreferrer">{children}</a> }}>{text}</Markdown></div>;
+const plugins = [remarkGfm, remarkDiscord];
+const colorPlugins = [remarkGfm, [remarkDiscord, { textColors: true }] as [typeof remarkDiscord, { textColors: boolean }]];
+function Spoiler({ children }: { children: React.ReactNode }) {
+  const [revealed, setRevealed] = useState(false);
+  return <span className={`mm-spoiler${revealed ? " is-revealed" : ""}`}><button aria-label={revealed ? "Hide spoiler" : "Reveal spoiler"} aria-pressed={revealed} onClick={() => setRevealed(v => !v)}>{revealed ? "Hide" : "Spoiler"}</button><span aria-hidden={!revealed}>{children}</span></span>;
+}
+export const MarkdownContent = memo(function MarkdownContent({ text, textColors = false }: { text: string; textColors?: boolean }) {
+  return <div className="mm-markdown"><Markdown remarkPlugins={textColors ? colorPlugins : plugins} skipHtml components={{
+    a: ({ children, href }) => <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>,
+    span: ({ children, node, style, className }) => (node?.properties?.["data-spoiler"] ?? node?.properties?.dataSpoiler) === "true" ? <Spoiler>{children}</Spoiler> : <span style={style} className={className}>{children}</span>,
+    time: ({ children, node }) => node?.properties?.["data-seconds"] != null ? <DiscordTimestamp seconds={Number(node.properties["data-seconds"])} format={String(node.properties["data-format"] ?? "f") as TimestampStyle} /> : <time>{children}</time>,
+  }}>{prepareDiscordMarkdown(text)}</Markdown></div>;
 });
 
 const palette = ["#22d3ee", "#c084fc", "#fb7185", "#fbbf24", "#34d399", "#60a5fa"];

@@ -31,6 +31,11 @@ test('zoom preserves the world coordinate under a cursor after panning', () => {
  actions.zoomAt(600, 300, 2.4); const c = getState().camera;
  assert.ok(Math.abs((600 - c.x) / c.zoom - x) < 1e-9); assert.ok(Math.abs((300 - c.y) / c.zoom - y) < 1e-9);
 });
+test('drag selection preserves the closed inspector and does not change canvas layout',()=>{
+ reset();actions.setInspector(false);actions.selectNode(Object.keys(getState().project.nodes)[0],false,false);
+ assert.equal(getState().ui.inspectorOpen,false);assert.equal(getState().ui.selectedNodeIds.length,1);
+ actions.setInspector(true);assert.equal(getState().ui.inspectorOpen,true);
+});
 test('new world nodes get their own canvas and return to their parent', () => {
  reset(); const root = getState().project.currentWorldId;
  const id = actions.createNodeAt(400, 300, { kind: 'world', title: 'My world' });

@@ -5,12 +5,15 @@ import { actions, beginUndoGroup, endUndoGroup, getState, useStore, setViewportS
 import { bezierPoints, nearestAnchor, screenToWorld } from "./engine";
 import type { MMNode } from "./types";
 import { ChartContent, MarkdownContent } from "./NodeContent";
+import { LinkPreviews } from "./LinkPreviews";
+import { settleNode, stretchNode } from "./nodeMotion";
 
 type Drag = {
   pointerId: number; mode: "pan" | "nodes" | "connect" | "resize";
   startX: number; startY: number; camera: { x: number; y: number; zoom: number };
   positions: Array<{ id: string; x: number; y: number; w: number; h: number }>;
   from?: string; undo?: number; moved: boolean;
+  lastX: number; lastY: number; lastAt: number; reducedMotion: boolean;
 };
 
 export function Canvas() {
@@ -48,6 +51,7 @@ export function Canvas() {
       element.removeEventListener("wheel", wheel);
       cancelAnimationFrame(frame.current);
       if (drag.current?.undo != null) endUndoGroup(drag.current.undo);
+      element.querySelectorAll<HTMLElement>(".mm-node").forEach(node => settleNode(node, true));
     };
   }, []);
 
@@ -61,6 +65,7 @@ export function Canvas() {
     const dx = x - current.startX;
     const dy = y - current.startY;
     if (!current.moved && Math.abs(dx) + Math.abs(dy) < 3) return;
+    if (current.moved && current.mode === "nodes" && x === current.lastX && y === current.lastY) return;
     current.moved = true;
     if (current.mode === "pan") {
       actions.setCamera(current.camera.x + dx, current.camera.y + dy, current.camera.zoom);
@@ -70,6 +75,9 @@ export function Canvas() {
     } else {
       if (current.undo == null) current.undo = beginUndoGroup();
       const settings = getState().project.settings;
+      const now = performance.now(), elapsed = Math.max(16, now - current.lastAt);
+      const vx = (x - current.lastX) / current.camera.zoom * 16 / elapsed;
+      const vy = (y - current.lastY) / current.camera.zoom * 16 / elapsed;
       const snap = (v: number) => settings.snapToGrid ? Math.round(v / settings.gridSize) * settings.gridSize : v;
       for (const original of current.positions) {
         const node = getState().project.nodes[original.id];
@@ -80,11 +88,16 @@ export function Canvas() {
         } else {
           node.x = snap(original.x + dx / current.camera.zoom);
           node.y = snap(original.y + dy / current.camera.zoom);
+          if (!current.reducedMotion) {
+            const element = container.current?.querySelector<HTMLElement>(`[data-node-id="${CSS.escape(node.id)}"]`);
+            if (element) stretchNode(element, vx, vy);
+          }
         }
         node.updated = Date.now();
         node._v = (node._v ?? 0) + 1;
       }
       bumpVersion();
+      current.lastX = x; current.lastY = y; current.lastAt = now;
     }
   };
   const finish = (e: React.PointerEvent, cancelled = false) => {
@@ -94,6 +107,10 @@ export function Canvas() {
     frame.current = 0;
     pending.current = null;
     if (!cancelled) move(e.clientX, e.clientY);
+    for (const original of current.positions) {
+      const element = container.current?.querySelector<HTMLElement>(`[data-node-id="${CSS.escape(original.id)}"]`);
+      if (element) settleNode(element, cancelled);
+    }
     if (current.mode === "connect" && current.from && !cancelled) {
       // Pointer capture changes e.target; hit-test the actual release position.
       const target = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>("[data-node-id]");
@@ -104,6 +121,7 @@ export function Canvas() {
       } else if (!current.moved) actions.startConnect(current.from);
     }
     actions.setTempEdge(undefined);
+    if (!cancelled && !current.moved && current.mode === "nodes" && getState().ui.selectedNodeIds.length === 1) actions.setInspector(true);
     if (current.undo != null) {
       endUndoGroup(current.undo);
       flushNotify();
@@ -152,7 +170,8 @@ export function Canvas() {
           if (e.shiftKey && mode === "nodes") {
             selected = ui.selectedNodeIds.includes(nodeId) ? ui.selectedNodeIds.filter(id => id !== nodeId) : [...ui.selectedNodeIds, nodeId];
           }
-          actions.selectNode(selected);
+          // Opening a closed inspector mid-drag shifts the canvas under the pointer.
+          actions.selectNode(selected, false, false);
         } else if (!e.shiftKey) {
           actions.clearSelection();
           actions.cancelConnect();
@@ -161,6 +180,7 @@ export function Canvas() {
           pointerId: e.pointerId, mode, startX: e.clientX, startY: e.clientY, camera: { ...getState().camera },
           positions: selected.map(id => getState().project.nodes[id]).filter(Boolean).map(n => ({ id: n.id, x: n.x, y: n.y, w: n.w, h: n.h })),
           from: nodeId, moved: false,
+          lastX: e.clientX, lastY: e.clientY, lastAt: performance.now(), reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
         };
         container.current?.focus({ preventScroll: true });
         e.currentTarget.setPointerCapture(e.pointerId);
@@ -213,8 +233,9 @@ const MapNode = memo(function MapNode({ node, selected, connecting }: { node: MM
     onDoubleClick={e => { e.stopPropagation(); if ((e.target as Element).closest("button, input, a")) return; actions.selectNode(node.id); actions.setInspector(true); }}>
     <div className="mm-node-heading"><span>{worldId ? "◈" : node.kind === "checklist" ? "☑" : node.kind === "chart" ? "▥" : "•"}</span><strong>{node.title || "Untitled"}</strong>{node.locked && <span title="Position locked">⌑</span>}<button className="mm-edit-node" aria-label={`Edit ${node.title}`} onClick={() => { actions.selectNode(node.id); actions.setInspector(true); }}>✎</button></div>
     <div className="mm-node-body">
-      {node.kind === "code" ? <pre className="mm-code"><code>{node.notes ?? node.description}</code></pre> : (node.notes || node.description || node.subtitle) && <MarkdownContent text={node.notes ?? node.description ?? node.subtitle ?? ""} />}
+      {node.kind === "code" ? <pre className="mm-code"><code>{node.notes ?? node.description}</code></pre> : (node.notes || node.description || node.subtitle) && <MarkdownContent text={node.notes ?? node.description ?? node.subtitle ?? ""} textColors={node.textColors} />}
       {node.kind === "chart" && node.chart && <ChartContent chart={node.chart} />}
+      <LinkPreviews node={node} />
       {node.kind === "checklist" && <div className="mm-node-checklist">{node.checklist?.map(item => <label key={item.id} className={`mm-check${item.done ? " is-done" : ""}`}><input type="checkbox" disabled={node.editLocked} checked={item.done} onChange={e => actions.setChecklistItem(node.id, item.id, { done: e.target.checked })} /><span>{item.text}</span></label>)}<small>{node.checklist?.filter(i => i.done).length ?? 0} / {node.checklist?.length ?? 0} complete</small></div>}
     </div>
     {worldId && <button className="mm-enter" onClick={() => actions.enterWorld(worldId)}>Open world →</button>}

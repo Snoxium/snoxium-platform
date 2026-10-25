@@ -34,6 +34,16 @@ export function parseProject(text: string): MMProject {
       !Array.isArray(node.tags) || !node.tags.every(t => typeof t === "string")) return fail();
     for (const key of ["subtitle", "description", "notes", "icon"])
       if (node[key] != null && typeof node[key] !== "string") return fail();
+    if (node.textColors != null && typeof node.textColors !== "boolean") return fail();
+    if (node.linkPreviews != null) {
+      if (!record(node.linkPreviews) || Object.keys(node.linkPreviews).length > 100) return fail();
+      for (const [url, preview] of Object.entries(node.linkPreviews)) {
+        if (!/^https?:\/\//i.test(url) || !record(preview) || typeof preview.title !== "string" ||
+          typeof preview.description !== "string" || typeof preview.siteName !== "string" || !finite(preview.updatedAt) ||
+          (preview.hidden != null && typeof preview.hidden !== "boolean") ||
+          (preview.image != null && (typeof preview.image !== "string" || !/^https?:\/\//i.test(preview.image)))) return fail();
+      }
+    }
     if (node.childWorldId != null && (typeof node.childWorldId !== "string" || !worlds[node.childWorldId])) return fail();
     if (node.linkedWorldId != null && (typeof node.linkedWorldId !== "string" || !worlds[node.linkedWorldId])) return fail();
     if (node.chart != null && (!record(node.chart) || !["bar", "line", "pie"].includes(String(node.chart.type)) ||

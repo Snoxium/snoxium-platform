@@ -49,3 +49,11 @@ const {svg}=mapSVG(getState().project);
 assert.ok(svg.includes(`aria-label="${type} chart"`));assert.ok(svg.includes('75'));assert.ok(svg.includes('fill="#253550"'));assert.ok(svg.includes('fill="#ffcc00"'));assert.ok(!svg.includes('<unsafe & label>'));
 }
 });
+test('preview snapshots and optional text colors survive independent duplication and backups',()=>{
+const url='https://example.com/';const preview={title:'Saved',description:'Details',siteName:'Example',updatedAt:1000};
+const id=actions.createNodeAt(0,0,{title:'Rich content',textColors:true,linkPreviews:{[url]:preview}});
+const [copy]=actions.duplicateNodes([id]);assert.equal(getState().project.nodes[copy].textColors,true);
+assert.deepEqual(getState().project.nodes[copy].linkPreviews,{[url]:preview});assert.notEqual(getState().project.nodes[copy].linkPreviews,getState().project.nodes[id].linkPreviews);
+assert.doesNotThrow(()=>actions.importJSON(actions.exportJSON()));
+const bad=JSON.parse(actions.exportJSON());bad.nodes[copy].linkPreviews[url].image='javascript:alert(1)';assert.throws(()=>actions.importJSON(JSON.stringify(bad)));
+});
