@@ -4,6 +4,7 @@ import { memo, useEffect, useRef } from "react";
 import { actions, beginUndoGroup, endUndoGroup, getState, useStore, setViewportSize, bumpVersion, flushNotify } from "./store";
 import { bezierPoints, nearestAnchor, screenToWorld } from "./engine";
 import type { MMNode } from "./types";
+import { ChartContent, MarkdownContent } from "./NodeContent";
 
 type Drag = {
   pointerId: number; mode: "pan" | "nodes" | "connect" | "resize";
@@ -206,13 +207,18 @@ export function Canvas() {
 }
 
 const MapNode = memo(function MapNode({ node, selected, connecting }: { node: MMNode; selected: boolean; connecting: boolean }) {
+  const worldId = node.linkedWorldId ?? node.childWorldId;
   return <div data-node-id={node.id} className={`mm-node${selected ? " is-selected" : ""}${connecting ? " is-connecting" : ""}`}
-    style={{ left: node.x, top: node.y, width: node.w, height: node.h, borderColor: selected || connecting ? "#22d3ee" : node.color?.stroke, background: node.color?.fill && !node.color.fill.endsWith("14") ? node.color.fill : undefined, color: node.color?.text }}
-    onDoubleClick={e => { e.stopPropagation(); if (node.childWorldId) actions.enterWorld(node.childWorldId); else { actions.selectNode(node.id); actions.setInspector(true); } }}>
-    <div className="mm-node-heading"><span>{node.childWorldId ? "◈" : node.kind === "checklist" ? "☑" : "•"}</span><strong>{node.title || "Untitled"}</strong>{node.locked && <span title="Position locked">⌑</span>}</div>
-    {(node.subtitle || node.description || node.notes) && <p>{node.subtitle || node.description || node.notes}</p>}
-    {node.checklist?.slice(0, 3).map(item => <label key={item.id} className="mm-check"><input type="checkbox" checked={item.done} onChange={e => actions.setChecklistItem(node.id, item.id, { done: e.target.checked })} />{item.text}</label>)}
-    {node.childWorldId && <button className="mm-enter" onClick={() => actions.enterWorld(node.childWorldId!)}>Open world →</button>}
+    style={{ left: node.x, top: node.y, width: node.w, height: node.h, borderColor: node.color?.stroke, background: node.color?.fill, color: node.color?.text, fontSize: node.font?.size ?? 14, borderRadius: node.shape === "pill" ? 32 : node.shape === "document" ? 2 : 14 }}
+    onDoubleClick={e => { e.stopPropagation(); if ((e.target as Element).closest("button, input, a")) return; actions.selectNode(node.id); actions.setInspector(true); }}>
+    <div className="mm-node-heading"><span>{worldId ? "◈" : node.kind === "checklist" ? "☑" : node.kind === "chart" ? "▥" : "•"}</span><strong>{node.title || "Untitled"}</strong>{node.locked && <span title="Position locked">⌑</span>}<button className="mm-edit-node" aria-label={`Edit ${node.title}`} onClick={() => { actions.selectNode(node.id); actions.setInspector(true); }}>✎</button></div>
+    <div className="mm-node-body">
+      {node.kind === "code" ? <pre className="mm-code"><code>{node.notes ?? node.description}</code></pre> : (node.notes || node.description || node.subtitle) && <MarkdownContent text={node.notes ?? node.description ?? node.subtitle ?? ""} />}
+      {node.kind === "chart" && node.chart && <ChartContent chart={node.chart} />}
+      {node.kind === "checklist" && <div className="mm-node-checklist">{node.checklist?.map(item => <label key={item.id} className={`mm-check${item.done ? " is-done" : ""}`}><input type="checkbox" disabled={node.editLocked} checked={item.done} onChange={e => actions.setChecklistItem(node.id, item.id, { done: e.target.checked })} /><span>{item.text}</span></label>)}<small>{node.checklist?.filter(i => i.done).length ?? 0} / {node.checklist?.length ?? 0} complete</small></div>}
+    </div>
+    {worldId && <button className="mm-enter" onClick={() => actions.enterWorld(worldId)}>Open world →</button>}
+    {node.status && node.status !== "none" && <small className="mm-node-status">{node.status}{node.dueDate ? ` · ${node.dueDate}` : ""}</small>}
     <button data-port="left" className="mm-port mm-port-left" aria-label={`Connect ${node.title}`} title="Drag to another node, or click then choose a node" />
     <button data-port="right" className="mm-port mm-port-right" aria-label={`Connect from ${node.title}`} title="Drag to another node, or click then choose a node" />
     {selected && !node.locked && <button data-resize className="mm-resize" aria-label={`Resize ${node.title}`} />}

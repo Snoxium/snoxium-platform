@@ -35,6 +35,9 @@ export function parseProject(text: string): MMProject {
     for (const key of ["subtitle", "description", "notes", "icon"])
       if (node[key] != null && typeof node[key] !== "string") return fail();
     if (node.childWorldId != null && (typeof node.childWorldId !== "string" || !worlds[node.childWorldId])) return fail();
+    if (node.linkedWorldId != null && (typeof node.linkedWorldId !== "string" || !worlds[node.linkedWorldId])) return fail();
+    if (node.chart != null && (!record(node.chart) || !["bar", "line", "pie"].includes(String(node.chart.type)) ||
+      !Array.isArray(node.chart.data) || !node.chart.data.every(row => record(row) && typeof row.id === "string" && typeof row.label === "string" && finite(row.value)))) return fail();
     if (node.checklist != null && (!Array.isArray(node.checklist) || !node.checklist.every(item =>
       record(item) && typeof item.id === "string" && typeof item.text === "string" && typeof item.done === "boolean"))) return fail();
     if (node.color != null && (!record(node.color) || Object.entries(node.color).some(([key, color]) =>

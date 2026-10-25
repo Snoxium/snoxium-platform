@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Canvas } from "./Canvas";
-import { actions, beginUndoGroup, endUndoGroup, getState, useStore, viewportSizeRef } from "./store";
+import { actions, getState, useStore, viewportSizeRef } from "./store";
 import { download, exportMapImage, toMarkdown } from "./exporters";
-import type { MMNode } from "./types";
+import { NodeEditor } from "./NodeEditor";
 
 export function MindMapApp() {
   const state = useStore(s => s);
@@ -80,32 +80,30 @@ export function MindMapApp() {
       <button onClick={() => setWorldsOpen(v => !v)} aria-expanded={worldsOpen}>◈ Worlds</button>
       <div className="mm-breadcrumbs" aria-label="World path">{crumbs.map((w, index) => <span key={w.id}>{index > 0 && <span className="mm-muted"> / </span>}<button onClick={() => { actions.cancelConnect(); actions.enterWorld(w.id); }}>{w.name}</button></span>)}</div>
       <div className="mm-tools">
+        <div className="mm-tool-group" aria-label="Create and connect">
         <button onClick={() => add()} title="Add node (N)">+ Node</button>
         <button onClick={() => add(true)}>+ World</button>
         <button className={ui.connectFromId || ui.connectAwaitFirst ? "is-active" : ""} onClick={() => {
           if (ui.connectFromId || ui.connectAwaitFirst) actions.cancelConnect(); else actions.startConnect(ui.selectedNodeIds.length === 1 ? ui.selectedNodeIds[0] : undefined);
         }}>↗ Connect</button>
+        </div><div className="mm-tool-group" aria-label="History">
         <button onClick={() => actions.undo()} title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
         <button onClick={() => actions.redo()} title="Redo (Ctrl+Shift+Z)" aria-label="Redo">↷</button>
+        </div><div className="mm-tool-group" aria-label="Canvas view">
         <button onClick={() => actions.resetCamera()} title="Fit all nodes">Fit</button>
         <button onClick={() => actions.setZoom(camera.zoom / 1.2)} aria-label="Zoom out">−</button>
         <button onClick={() => actions.setZoom(1)} title="Reset zoom">{Math.round(camera.zoom * 100)}%</button>
         <button onClick={() => actions.setZoom(camera.zoom * 1.2)} aria-label="Zoom in">+</button>
-        <button onClick={() => setMoreOpen(v => !v)} aria-expanded={moreOpen}>Files & settings</button>
+        </div><button className={moreOpen ? "is-active" : ""} onClick={() => setMoreOpen(v => !v)} aria-expanded={moreOpen}>Files & settings</button>
       </div>
     </div>
-    {moreOpen && <div className="mm-filebar">
-      <label>Map name<input aria-label="Map name" value={project.name} onChange={e => actions.setProjectName(e.target.value)} /></label>
-      <label>World name<input aria-label="World name" value={current.name} onChange={e => actions.renameWorld(current.id, e.target.value)} /></label>
-      <button onClick={backup}>Download backup</button>
-      <button onClick={() => fileInput.current?.click()}>Import JSON</button>
-      <button onClick={() => image("png")}>PNG</button>
-      <button onClick={() => image("svg")}>SVG</button>
-      <button onClick={() => download(`${project.name}.md`, toMarkdown(project), "text/markdown")}>Markdown</button>
-      <label className="mm-check"><input type="checkbox" checked={project.settings.gridEnabled} onChange={e => actions.updateSettings({ gridEnabled: e.target.checked })} />Grid</label>
-      <label className="mm-check"><input type="checkbox" checked={project.settings.snapToGrid} onChange={e => actions.updateSettings({ snapToGrid: e.target.checked })} />Snap to grid</label>
-      <label className="mm-check"><input type="checkbox" checked={project.settings.autoSave} onChange={e => actions.updateSettings({ autoSave: e.target.checked })} />Autosave</label>
-      <button onClick={() => actions.saveNow()}>Save now</button>
+    {moreOpen && <div className="mm-filebar" role="region" aria-label="Files and settings">
+      <div className="mm-panel-heading"><strong>Files & settings</strong><button onClick={() => setMoreOpen(false)} aria-label="Close settings">&times;</button></div>
+      <div className="mm-settings-grid">
+        <section><h3>Map & world</h3><label>Map name<input aria-label="Map name" value={project.name} onChange={e => actions.setProjectName(e.target.value)} /></label><label>World name<input aria-label="World name" value={current.name} onChange={e => actions.renameWorld(current.id, e.target.value)} /></label></section>
+        <section><h3>Save & export</h3><div className="mm-button-row"><button onClick={backup}>Download backup</button><button onClick={() => fileInput.current?.click()}>Import JSON</button></div><div className="mm-button-row"><button onClick={() => image("png")}>PNG</button><button onClick={() => image("svg")}>SVG</button><button onClick={() => download(`${project.name}.md`, toMarkdown(project), "text/markdown")}>Markdown</button></div><p className="mm-muted">Images export the current world. JSON backs up every world.</p></section>
+        <section><h3>Canvas preferences</h3><label className="mm-check"><input type="checkbox" checked={project.settings.gridEnabled} onChange={e => actions.updateSettings({ gridEnabled: e.target.checked })} />Grid</label><label className="mm-check"><input type="checkbox" checked={project.settings.snapToGrid} onChange={e => actions.updateSettings({ snapToGrid: e.target.checked })} />Snap to grid</label><label className="mm-check"><input type="checkbox" checked={project.settings.autoSave} onChange={e => actions.updateSettings({ autoSave: e.target.checked })} />Autosave</label><button onClick={() => actions.saveNow()}>Save now</button></section>
+      </div>
     </div>}
     <input ref={fileInput} aria-label="Import mindmap file" type="file" accept=".json,application/json" hidden onChange={async e => {
       const file = e.target.files?.[0]; e.target.value = "";
@@ -137,39 +135,14 @@ export function MindMapApp() {
         {edge && <>
           <label>Label<input aria-label="Connection label" value={edge.label ?? ""} onChange={e => actions.updateEdge(edge.id, { label: e.target.value })} /></label>
           <label>Line style<select value={edge.style ?? "bezier"} onChange={e => actions.updateEdge(edge.id, { style: e.target.value as "bezier" | "straight" | "orthogonal" })}><option value="bezier">Curved</option><option value="straight">Straight</option><option value="orthogonal">Right angles</option></select></label>
+          <label>Line color<input type="color" aria-label="Connection color" value={edge.color ?? "#94a3b8"} onChange={e => actions.updateEdge(edge.id, { color: e.target.value })} /></label>
+          <label>Arrow direction<select value={edge.direction ?? "forward"} onChange={e => actions.updateEdge(edge.id, { direction: e.target.value as "none" | "forward" | "back" | "both" })}><option value="none">No arrows</option><option value="forward">Forward</option><option value="back">Back</option><option value="both">Both ends</option></select></label>
+          <label>Line width<input type="number" min="1" max="12" value={edge.thickness ?? 2} onChange={e => actions.updateEdge(edge.id, { thickness: Math.max(1, Math.min(12, Number(e.target.value) || 2)) })} /></label>
+          <label className="mm-check"><input type="checkbox" checked={!!edge.dashed} onChange={e => actions.updateEdge(edge.id, { dashed: e.target.checked })} />Dashed line</label>
           <button className="mm-danger" onClick={() => actions.deleteEdges([edge.id])}>Delete connection</button>
         </>}
       </aside>}
     </div>
     <div className="mm-status"><span>Drag background to pan · Scroll to zoom · Drag a dot to connect · Double-click to edit</span><span aria-live="polite">{state.dirty ? "Unsaved changes" : state.lastSavedAt ? "Saved in this browser" : "Stored in this browser"} · <button onClick={backup}>Backup</button></span></div>
-  </div>;
-}
-
-function NodeEditor({ node }: { node: MMNode }) {
-  const undo = useRef<number | null>(null);
-  useEffect(() => () => {
-    if (undo.current != null) endUndoGroup(undo.current);
-  }, []);
-  const patch = (value: Partial<MMNode>) => actions.updateNode(node.id, value);
-  return <div className="mm-editor" onFocusCapture={() => { if (undo.current == null) undo.current = beginUndoGroup(); }} onBlurCapture={e => {
-    if (!e.currentTarget.contains(e.relatedTarget)) {
-      if (undo.current != null) endUndoGroup(undo.current);
-      undo.current = null;
-    }
-  }}>
-    <label>Title<input aria-label="Node title" value={node.title} disabled={node.editLocked} onChange={e => {
-      patch({ title: e.target.value });
-      if (node.childWorldId) actions.renameWorld(node.childWorldId, e.target.value);
-    }} /></label>
-    <label>Notes<textarea aria-label="Node notes" rows={6} value={node.notes ?? node.description ?? ""} disabled={node.editLocked} onChange={e => patch({ notes: e.target.value, description: e.target.value })} /></label>
-    <label>Accent<input aria-label="Node accent" type="color" value={/^#[0-9a-f]{6}$/i.test(node.color?.stroke ?? "") ? node.color!.stroke : "#22d3ee"} onChange={e => patch({ color: { ...node.color, stroke: e.target.value } })} /></label>
-    <label className="mm-check"><input type="checkbox" checked={!!node.locked} onChange={() => actions.toggleNode(node.id, "locked")} />Lock position</label>
-    {node.checklist?.map(item => <label className="mm-check" key={item.id}><input type="checkbox" checked={item.done} onChange={e => actions.setChecklistItem(node.id, item.id, { done: e.target.checked })} /><input aria-label="Checklist item" value={item.text} onChange={e => actions.setChecklistItem(node.id, item.id, { text: e.target.value })} /><button onClick={() => actions.removeChecklistItem(node.id, item.id)} aria-label={`Remove ${item.text}`}>×</button></label>)}
-    <button onClick={() => actions.addChecklistItem(node.id, "New task")}>+ Checklist item</button>
-    {node.childWorldId ? <button onClick={() => actions.enterWorld(node.childWorldId!)}>Open world →</button> : <button onClick={() => actions.convertToWorld(node.id)}>Make this a world</button>}
-    <button onClick={() => actions.startConnect(node.id)}>Connect to another node</button>
-    <button onClick={() => actions.duplicateNodes([node.id])}>Duplicate node</button>
-    <button className="mm-danger" onClick={() => actions.deleteNodes([node.id])}>Delete node</button>
-    {node.childWorldId && <p className="mm-muted">Deleting this node keeps its world in the Worlds list.</p>}
   </div>;
 }

@@ -168,6 +168,8 @@ export function createNode(
     isPortal: partial.isPortal,
     portalTarget: partial.portalTarget,
     childWorldId: partial.childWorldId,
+    linkedWorldId: partial.linkedWorldId,
+    chart: partial.chart ? { type: partial.chart.type, data: partial.chart.data.map(row => ({ ...row })) } : undefined,
     icon: partial.icon,
     font: partial.font,
     order: partial.order,
@@ -852,7 +854,20 @@ export const actions = {
     }
     n.isWorld = true;
     n.kind = "world";
+    n.linkedWorldId = undefined;
     touchNode(n);
+    notify();
+  },
+  linkNodeToWorld(nodeId: string, worldId?: string) {
+    const node = store.project.nodes[nodeId];
+    if (!node || node.editLocked || (worldId && !store.project.worlds[worldId])) return;
+    pushUndo();
+    // Changing a doorway never deletes its existing world or reparents another canvas.
+    node.childWorldId = undefined;
+    node.linkedWorldId = worldId || undefined;
+    node.isWorld = !!worldId;
+    if (!worldId && node.kind === "world") node.kind = "text";
+    touchNode(node);
     notify();
   },
   enterWorld(worldId: string) {

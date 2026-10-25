@@ -12,7 +12,8 @@ export type NodeKind =
   | "database"
   | "timer"
   | "calculator"
-  | "world";
+  | "world"
+  | "chart";
 
 export type NodeStatus = "none" | "todo" | "in-progress" | "done" | "blocked";
 export type EdgeStyle = "bezier" | "straight" | "orthogonal";
@@ -82,6 +83,8 @@ export interface MMNode {
   isPortal?: boolean;
   portalTarget?: string;
   childWorldId?: string;
+  linkedWorldId?: string;
+  chart?: { type: "bar" | "line" | "pie"; data: Array<{ id: string; label: string; value: number }> };
   icon?: string;
   font?: { size?: number; family?: string; bold?: boolean };
   order?: number;

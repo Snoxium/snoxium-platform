@@ -15,3 +15,27 @@ assert.ok(childCopy);assert.notEqual(childCopy.id,child);actions.updateNode(chil
 assert.equal(getState().project.nodes[child].title,'Original child');
 assert.doesNotThrow(()=>actions.importJSON(actions.exportJSON()));
 });
+
+test('deleted world doorways can be relinked without deleting, cloning or reparenting worlds',()=>{
+const p=getState().project;const original=Object.values(p.nodes).find(n=>n.childWorldId);
+const world=original.childWorldId, parent=p.worlds[world].parentWorldId;
+actions.enterWorld(p.rootWorldId);actions.deleteNodes([original.id]);
+assert.ok(p.worlds[world]);
+const link=actions.createNodeAt(100,100,{title:'Restored doorway'});
+actions.linkNodeToWorld(link,world);assert.equal(p.nodes[link].linkedWorldId,world);
+assert.equal(p.worlds[world].parentWorldId,parent);
+const [copy]=actions.duplicateNodes([link]);assert.equal(p.nodes[copy].linkedWorldId,world);
+actions.linkNodeToWorld(link);assert.equal(p.nodes[link].linkedWorldId,undefined);assert.ok(p.worlds[world]);
+assert.doesNotThrow(()=>actions.importJSON(actions.exportJSON()));
+const bad=JSON.parse(actions.exportJSON());bad.nodes[copy].linkedWorldId='missing';assert.throws(()=>actions.importJSON(JSON.stringify(bad)));
+});
+
+test('chart data survives duplication and backup without sharing mutable data',()=>{
+const id=actions.createNodeAt(20,20,{title:'Chart'});
+actions.updateNode(id,{kind:'chart',chart:{type:'bar',data:[{id:'one',label:'A',value:10}]}});
+const [copy]=actions.duplicateNodes([id]);
+assert.deepEqual(getState().project.nodes[copy].chart,getState().project.nodes[id].chart);
+assert.notEqual(getState().project.nodes[copy].chart.data,getState().project.nodes[id].chart.data);
+assert.doesNotThrow(()=>actions.importJSON(actions.exportJSON()));
+const bad=JSON.parse(actions.exportJSON());bad.nodes[copy].chart.data[0].value='oops';assert.throws(()=>actions.importJSON(JSON.stringify(bad)));
+});

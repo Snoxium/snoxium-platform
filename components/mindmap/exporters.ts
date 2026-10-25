@@ -74,6 +74,11 @@ export function toMarkdown(p: MMProject): string {
         out.push("  > " + n.notes.replace(/\n/g, "\n  > "));
         out.push("");
       }
+      if (n.chart?.data.length) {
+        out.push("", "  | Label | Value |", "  | --- | ---: |");
+        for (const row of n.chart.data) out.push(`  | ${row.label.replace(/\|/g, "\\|").replace(/\n/g, " ")} | ${row.value} |`);
+        out.push("");
+      }
     }
     out.push("");
     for (const c of Object.values(p.worlds).filter(
