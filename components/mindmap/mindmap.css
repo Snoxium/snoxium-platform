@@ -13,7 +13,8 @@
 .mm-app select option { background:#151722; }
 .mm-workspace { display:flex; position:relative; height:clamp(460px,70dvh,900px); min-height:460px; }
 .mm-canvas { position:relative; flex:1; min-width:0; overflow:hidden; touch-action:none; user-select:none; background-color:#090c15; }
-.mm-world { position:absolute; top:0; left:0; transform-origin:0 0; will-change:transform; }
+/* Keep text rasterized at the current zoom instead of scaling a cached compositor texture. */
+.mm-world { position:absolute; top:0; left:0; transform-origin:0 0; }
 .mm-edges { position:absolute; left:0; top:0; overflow:visible; pointer-events:none; }
 .mm-node { position:absolute; border:1px solid #475569; border-radius:14px; background:#181826; padding:16px; cursor:grab; box-shadow:0 8px 20px #0003; }
 .mm-node.is-selected,.mm-node.is-connecting { outline:2px solid #22d3ee50; outline-offset:2px; }
