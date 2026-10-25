@@ -105,7 +105,6 @@
 @media(prefers-reduced-motion:reduce) { .mm-node.is-dragging { transform:none !important; } }
 .mm-node-heading { flex-shrink:0; font-size:1em; line-height:1.4; }
 .mm-node-heading strong { flex:1; }
-.mm-app .mm-edit-node { border:0; padding:0 3px; background:transparent; color:#a1a1aa; font-size:13px; }
 .mm-node-body { min-height:0; flex:1; overflow:auto; margin-top:8px; cursor:default; scrollbar-width:thin; }
 .mm-node-body .mm-markdown { font-size:.88em; }
 .mm-node .mm-markdown p { display:block; -webkit-line-clamp:unset; overflow:visible; margin:0 0 .6em; font-size:inherit; line-height:1.5; color:inherit; }
