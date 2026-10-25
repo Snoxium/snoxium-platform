@@ -30,8 +30,22 @@ export function NodeEditor({ node }: { node: MMNode }) {
     patch({ notes: value, description: value });
     requestAnimationFrame(() => { input?.focus(); input?.setSelectionRange(start + before.length, start + before.length + text.length); });
   };
-  return <div className="mm-editor" onFocusCapture={() => { if (undo.current == null) undo.current = beginUndoGroup(); }} onBlurCapture={e => {
-    if (!e.currentTarget.contains(e.relatedTarget)) { if (undo.current != null) endUndoGroup(undo.current); undo.current = null; }
+  const fitContent = () => {
+    const card = document.querySelector<HTMLElement>(`[data-node-id="${CSS.escape(node.id)}"]`);
+    const body = card?.querySelector<HTMLElement>(".mm-node-body");
+    if (!card || !body) return;
+    const extra = Array.from(card.children).filter(e => e !== body && !e.matches(".mm-port,.mm-resize")).reduce((sum, e) => sum + (e as HTMLElement).offsetHeight + 8, 0);
+    const contentHeight = Array.from(body.children).reduce((sum, e) => {
+      const style = getComputedStyle(e);
+      return sum + (e as HTMLElement).offsetHeight + (parseFloat(style.marginTop) || 0) + (parseFloat(style.marginBottom) || 0);
+    }, 0);
+    patch({ h: Math.max(100, Math.min(3000, contentHeight + extra + 40)) });
+  };
+  return <div className="mm-editor" onFocusCapture={e => {
+    if ((e.target as HTMLElement).matches('textarea,input:not([type="checkbox"]):not([type="color"])') && undo.current == null) undo.current = beginUndoGroup();
+  }} onBlurCapture={() => {
+    if (undo.current != null) endUndoGroup(undo.current);
+    undo.current = null;
   }}>
     <label>Title<input aria-label="Node title" value={node.title} disabled={node.editLocked} onChange={e => patch({ title: e.target.value })} /></label>
     <fieldset disabled={node.editLocked}>
@@ -61,6 +75,7 @@ export function NodeEditor({ node }: { node: MMNode }) {
         <div className="mm-swatches" aria-label="Color presets">{['#22d3ee','#a78bfa','#f472b6','#fb7185','#fbbf24','#34d399'].map(c => <button key={c} aria-label={`Use ${c} colors`} style={{ background: c }} onClick={() => patch({ color: { fill: c + '20', stroke: c, text: '#f4f4f5' } })} />)}<button onClick={() => patch({ color: undefined })}>Reset</button></div>
         <div className="mm-field-grid"><label>Shape<select value={node.shape ?? "card"} onChange={e => patch({ shape: e.target.value as MMNode['shape'] })}><option value="card">Rounded card</option><option value="pill">Pill</option><option value="document">Square card</option></select></label><label>Text size<input aria-label="Node font size" type="number" min="10" max="48" value={node.font?.size ?? 14} onChange={e => patch({ font: { ...node.font, size: Math.max(10, Math.min(48, Number(e.target.value) || 14)) } })} /></label></div>
         <div className="mm-field-grid"><label>Width<input aria-label="Node width" type="number" min="100" max="3000" value={node.w} onChange={e => patch({ w: Math.max(100, Math.min(3000, Number(e.target.value) || 100)) })} /></label><label>Height<input aria-label="Node height" type="number" min="80" max="3000" value={node.h} onChange={e => patch({ h: Math.max(80, Math.min(3000, Number(e.target.value) || 80)) })} /></label></div>
+        <button onClick={fitContent}>Fit content</button>
       </details>
       <section className="mm-editor-section"><h3>World link</h3><label>Open an existing world<select aria-label="Linked world" value={destination ?? ""} onChange={e => actions.linkNodeToWorld(node.id, e.target.value || undefined)}><option value="">No world linked</option>{Object.values(worlds).map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label>
         {destination ? <button onClick={() => actions.enterWorld(destination)}>Open world →</button> : <button onClick={() => actions.convertToWorld(node.id)}>Create a new world</button>}

@@ -486,7 +486,7 @@ export const actions = {
   fitNode(nodeId: string) {
     const n = store.project.nodes[nodeId];
     if (!n) return;
-    actions.fitRect(n.x - 40, n.y - 40, n.w + 80, n.h + 80);
+    actions.fitRect(n.x - 40, n.y - 40, n.w + 80, n.h + 80, 1);
   },
   fitSelection() {
     const nodes = store.ui.selectedNodeIds
@@ -508,11 +508,11 @@ export const actions = {
     }
     actions.fitRect(x1 - 40, y1 - 40, x2 - x1 + 80, y2 - y1 + 80);
   },
-  fitRect(x: number, y: number, w: number, h: number) {
+  fitRect(x: number, y: number, w: number, h: number, maxZoom = 3) {
     const viewport = viewportSizeRef.current;
     const vw = viewport?.w ?? 1200;
     const vh = viewport?.h ?? 800;
-    const scale = Math.min(vw / Math.max(1, w), vh / Math.max(1, h), 3);
+    const scale = Math.min(vw / Math.max(1, w), vh / Math.max(1, h), maxZoom);
     const nx = -x * scale + (vw - w * scale) / 2;
     const ny = -y * scale + (vh - h * scale) / 2;
     actions.setCamera(nx, ny, scale);

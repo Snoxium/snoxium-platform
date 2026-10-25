@@ -183,6 +183,39 @@ export function download(name: string, data: string, mime: string) {
 
 const xml = (s: string) => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '\"': "&quot;", "'": "&apos;" }[c]!));
 
+function chartSVG(node: MMNode): string {
+  if (!node.chart?.data.length) return "";
+  const rows = node.chart.data.slice(0, 30);
+  const colors = ["#22d3ee", "#c084fc", "#fb7185", "#fbbf24", "#34d399", "#60a5fa"];
+  const max = Math.max(1, ...rows.map(row => Math.abs(row.value)));
+  const text = (x: number, y: number, label: string, anchor = "start") => `<text x="${x}" y="${y}" fill="${xml(node.color?.text ?? "#e4e4e7")}" font-size="10" text-anchor="${anchor}">${xml(label)}</text>`;
+  let content = "";
+  if (node.chart.type === "pie") {
+    const total = rows.reduce((sum, row) => sum + Math.max(0, row.value), 0);
+    let offset = 0;
+    content = `<circle cx="65" cy="75" r="40" fill="none" stroke="#475569" stroke-width="22"/>`;
+    rows.forEach((row, index) => {
+      const fraction = total ? Math.max(0, row.value) / total * 100 : 0;
+      content += `<circle cx="65" cy="75" r="40" fill="none" stroke="${colors[index % colors.length]}" stroke-width="22" pathLength="100" stroke-dasharray="${fraction} ${100 - fraction}" stroke-dashoffset="${-offset}" transform="rotate(-90 65 75)"/>`;
+      offset += fraction;
+      content += text(125, 20 + index * 15, `${row.label}: ${row.value}`);
+    });
+  } else if (node.chart.type === "line") {
+    content = `<path d="M15 10 V120 H250" stroke="#64748b" fill="none"/><polyline points="${rows.map((row, i) => `${20 + i * 220 / Math.max(1, rows.length - 1)},${65 - row.value / max * 45}`).join(" ")}" fill="none" stroke="#22d3ee" stroke-width="3"/>`;
+    rows.forEach((row, i) => {
+      const x = 20 + i * 220 / Math.max(1, rows.length - 1), y = 65 - row.value / max * 45;
+      content += `<circle cx="${x}" cy="${y}" r="4" fill="#22d3ee"/>` + text(x, y - 9, String(row.value), "middle") + text(x, 138 + i % 2 * 12, row.label.slice(0, 15), "middle");
+    });
+  } else {
+    const step = Math.min(25, 160 / rows.length);
+    rows.forEach((row, i) => {
+      const y = 12 + i * step;
+      content += text(0, y + 9, row.label.slice(0, 13)) + `<rect x="80" y="${y}" width="${140 * Math.abs(row.value) / max}" height="${Math.max(2, step - 9)}" rx="2" fill="${colors[i % colors.length]}"/>` + text(258, y + 9, String(row.value), "end");
+    });
+  }
+  return `<svg x="${node.x + 12}" y="${node.y + 43}" width="${Math.max(1, node.w - 24)}" height="${Math.max(1, node.h - 55)}" viewBox="0 0 260 170" role="img" aria-label="${xml(node.chart.type)} chart">${content}</svg>`;
+}
+
 export function mapSVG(project: MMProject): { svg: string; width: number; height: number } {
   const nodes = Object.values(project.nodes).filter(n => n.worldId === project.currentWorldId && !n.hidden);
   if (!nodes.length) throw new Error("Add a node before exporting an image.");
@@ -196,6 +229,8 @@ export function mapSVG(project: MMProject): { svg: string; width: number; height
     return `<path d="${shape.d}" stroke="${xml(e.color ?? "#94a3b8")}" stroke-width="2" fill="none"/>` + (e.label ? `<text x="${shape.mid.x}" y="${shape.mid.y - 10}" fill="#e4e4e7" font-size="12" text-anchor="middle">${xml(e.label)}</text>` : "");
   }).join("");
   const cards = nodes.map(n => {
+    const background = `<rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="${n.shape === "document" ? 2 : n.shape === "pill" ? 32 : 14}" fill="${xml(n.color?.fill ?? "#181826")}" stroke="${xml(n.color?.stroke ?? "#475569")}"/>`;
+    if (n.kind === "chart" && n.chart) return `<g>${background}<text x="${n.x + 16}" y="${n.y + 27}" fill="${xml(n.color?.text ?? "#e4e4e7")}" font-size="15" font-weight="600">${xml(n.title)}</text>${chartSVG(n)}</g>`;
     const lines = [n.title, ...(n.notes || n.description || n.subtitle || "").split(/\n/), ...(n.checklist ?? []).map(c => `${c.done ? "[x]" : "[ ]"} ${c.text}`)];
     const wrapped: string[] = [], limit = Math.max(10, Math.floor((n.w - 32) / 8));
     for (const line of lines) {
@@ -206,7 +241,7 @@ export function mapSVG(project: MMProject): { svg: string; width: number; height
       }
       wrapped.push(row);
     }
-    return `<g><rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="14" fill="#181826" stroke="${xml(n.color?.stroke ?? "#475569")}"/>` + wrapped.slice(0, Math.max(1, Math.floor((n.h - 22) / 21))).map((line, i) => `<text x="${n.x + 16}" y="${n.y + 27 + i * 21}" fill="#e4e4e7" font-size="${i ? 12 : 15}" font-weight="${i ? 400 : 600}">${xml(line)}</text>`).join("") + `</g>`;
+    return `<g>${background}` + wrapped.slice(0, Math.max(1, Math.floor((n.h - 22) / 21))).map((line, i) => `<text x="${n.x + 16}" y="${n.y + 27 + i * 21}" fill="${xml(n.color?.text ?? "#e4e4e7")}" font-size="${i ? 12 : n.font?.size ?? 15}" font-weight="${i ? 400 : 600}">${xml(line)}</text>`).join("") + `</g>`;
   }).join("");
   return { width, height, svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${x} ${y} ${width} ${height}" font-family="Arial,sans-serif"><rect x="${x}" y="${y}" width="${width}" height="${height}" fill="#090c15"/>${edges}${cards}</svg>` };
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Canvas } from "./Canvas";
-import { actions, getState, useStore, viewportSizeRef } from "./store";
+import { actions, getState, setViewportSize, useStore, viewportSizeRef } from "./store";
 import { download, exportMapImage, toMarkdown } from "./exporters";
 import { NodeEditor } from "./NodeEditor";
 
@@ -65,7 +65,11 @@ export function MindMapApp() {
     }
     const id = actions.createNodeAt(x, y,
       { title: isWorld ? "New world" : "New idea", kind: isWorld ? "world" : "text", w: 240, h: 130 });
-    actions.fitNode(id);
+    requestAnimationFrame(() => {
+      const canvas = document.querySelector<HTMLElement>("[data-mindmap-canvas]");
+      if (canvas) setViewportSize(canvas.clientWidth, canvas.clientHeight);
+      actions.fitNode(id);
+    });
     return id;
   };
   const backup = () => download(`${project.name.replace(/[^a-z0-9-]/gi, "-") || "mindmap"}.json`, actions.exportJSON(), "application/json");

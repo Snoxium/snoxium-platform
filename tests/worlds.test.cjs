@@ -39,3 +39,13 @@ assert.notEqual(getState().project.nodes[copy].chart.data,getState().project.nod
 assert.doesNotThrow(()=>actions.importJSON(actions.exportJSON()));
 const bad=JSON.parse(actions.exportJSON());bad.nodes[copy].chart.data[0].value='oops';assert.throws(()=>actions.importJSON(JSON.stringify(bad)));
 });
+
+test('image exports include each chart style, values and chosen node colors',()=>{
+const {mapSVG}=require('../components/mindmap/exporters.ts');
+const id=actions.createNodeAt(10,10,{title:'Export chart'});
+for(const type of ['bar','line','pie']){
+actions.updateNode(id,{kind:'chart',color:{fill:'#253550',text:'#ffcc00'},chart:{type,data:[{id:'a',label:'<unsafe & label>',value:75},{id:'b',label:'B',value:25}]}});
+const {svg}=mapSVG(getState().project);
+assert.ok(svg.includes(`aria-label="${type} chart"`));assert.ok(svg.includes('75'));assert.ok(svg.includes('fill="#253550"'));assert.ok(svg.includes('fill="#ffcc00"'));assert.ok(!svg.includes('<unsafe & label>'));
+}
+});
