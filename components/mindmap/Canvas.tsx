@@ -182,6 +182,12 @@ export function Canvas() {
           from: nodeId, moved: false,
           lastX: e.clientX, lastY: e.clientY, lastAt: performance.now(), reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
         };
+        if (mode === "nodes" && !drag.current.reducedMotion) {
+          for (const original of drag.current.positions) {
+            const element = container.current?.querySelector<HTMLElement>(`[data-node-id="${CSS.escape(original.id)}"]`);
+            if (element && !getState().project.nodes[original.id]?.locked) stretchNode(element, 0, 0);
+          }
+        }
         container.current?.focus({ preventScroll: true });
         e.currentTarget.setPointerCapture(e.pointerId);
         e.preventDefault();
