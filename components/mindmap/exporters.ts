@@ -1,6 +1,7 @@
 "use client";
 
 import type { MMProject, MMNode, MMWorld } from "./types";
+import { bezierPoints, nearestAnchor } from "./engine";
 
 export function toPlainText(p: MMProject): string {
   const lines: string[] = [];
@@ -175,93 +176,51 @@ export function download(name: string, data: string, mime: string) {
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
-export async function exportPNG(svgElement: SVGSVGElement, nodesRoot: HTMLElement, project: MMProject, worldId: string, scale = 2) {
-  const nodes = Object.values(project.nodes).filter((n) => n.worldId === worldId);
-  if (!nodes.length) return;
-  let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
-  for (const n of nodes) {
-    x1 = Math.min(x1, n.x);
-    y1 = Math.min(y1, n.y);
-    x2 = Math.max(x2, n.x + n.w);
-    y2 = Math.max(y2, n.y + n.h);
-  }
-  const pad = 40;
-  x1 -= pad; y1 -= pad; x2 += pad; y2 += pad;
-  const w = Math.ceil((x2 - x1) * scale);
-  const h = Math.ceil((y2 - y1) * scale);
+const xml = (s: string) => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '\"': "&quot;", "'": "&apos;" }[c]!));
 
-  const doctype =
-    '<?xml version="1.0" encoding="UTF-8"?>';
-  const svgData = serializeSVG(svgElement, nodesRoot, x1, y1, x2 - x1, y2 - y1);
-  const svgBlob = new Blob([doctype + svgData], { type: "image/svg+xml;charset=utf-8" });
-  const url = URL.createObjectURL(svgBlob);
-  const img = new Image();
-  await new Promise<void>((res, rej) => {
-    img.onload = () => res();
-    img.onerror = (e) => rej(e);
-    img.src = url;
-  });
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d")!;
-  ctx.fillStyle = "#05050a";
-  ctx.fillRect(0, 0, w, h);
-  ctx.drawImage(img, 0, 0, w, h);
-  URL.revokeObjectURL(url);
-  const png = await new Promise<string>((res) =>
-    canvas.toBlob((b) => {
-      const reader = new FileReader();
-      reader.onload = () => res(reader.result as string);
-      reader.readAsDataURL(b!);
-    }, "image/png"),
-  );
-  const a = document.createElement("a");
-  a.href = png;
-  a.download = `${project.name.replace(/\s+/g, "-")}.png`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+export function mapSVG(project: MMProject): { svg: string; width: number; height: number } {
+  const nodes = Object.values(project.nodes).filter(n => n.worldId === project.currentWorldId && !n.hidden);
+  if (!nodes.length) throw new Error("Add a node before exporting an image.");
+  const x = Math.min(...nodes.map(n => n.x)) - 40, y = Math.min(...nodes.map(n => n.y)) - 40;
+  const width = Math.ceil(Math.max(...nodes.map(n => n.x + n.w)) - x + 40);
+  const height = Math.ceil(Math.max(...nodes.map(n => n.y + n.h)) - y + 40);
+  const visible = new Set(nodes.map(n => n.id));
+  const edges = Object.values(project.edges).filter(e => e.worldId === project.currentWorldId && visible.has(e.from) && visible.has(e.to)).map(e => {
+    const a = project.nodes[e.from], b = project.nodes[e.to];
+    const shape = bezierPoints(nearestAnchor(a, { x: b.x + b.w / 2, y: b.y + b.h / 2 }), nearestAnchor(b, { x: a.x + a.w / 2, y: a.y + a.h / 2 }), e.style ?? "bezier");
+    return `<path d="${shape.d}" stroke="${xml(e.color ?? "#94a3b8")}" stroke-width="2" fill="none"/>` + (e.label ? `<text x="${shape.mid.x}" y="${shape.mid.y - 10}" fill="#e4e4e7" font-size="12" text-anchor="middle">${xml(e.label)}</text>` : "");
+  }).join("");
+  const cards = nodes.map(n => {
+    const lines = [n.title, ...(n.notes || n.description || n.subtitle || "").split(/\n/), ...(n.checklist ?? []).map(c => `${c.done ? "[x]" : "[ ]"} ${c.text}`)];
+    const wrapped: string[] = [], limit = Math.max(10, Math.floor((n.w - 32) / 8));
+    for (const line of lines) {
+      let row = "";
+      for (const word of line.split(/\s+/)) {
+        if ((row + " " + word).length > limit && row) { wrapped.push(row); row = ""; }
+        row += (row ? " " : "") + word;
+      }
+      wrapped.push(row);
+    }
+    return `<g><rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="14" fill="#181826" stroke="${xml(n.color?.stroke ?? "#475569")}"/>` + wrapped.slice(0, Math.max(1, Math.floor((n.h - 22) / 21))).map((line, i) => `<text x="${n.x + 16}" y="${n.y + 27 + i * 21}" fill="#e4e4e7" font-size="${i ? 12 : 15}" font-weight="${i ? 400 : 600}">${xml(line)}</text>`).join("") + `</g>`;
+  }).join("");
+  return { width, height, svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${x} ${y} ${width} ${height}" font-family="Arial,sans-serif"><rect x="${x}" y="${y}" width="${width}" height="${height}" fill="#090c15"/>${edges}${cards}</svg>` };
 }
 
-export function serializeSVG(svgEl: SVGSVGElement, nodesRoot: HTMLElement, x: number, y: number, w: number, h: number): string {
-  const clone = svgEl.cloneNode(true) as SVGSVGElement;
-  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-  clone.setAttribute("width", String(w));
-  clone.setAttribute("height", String(h));
-  clone.setAttribute("viewBox", `${x} ${y} ${w} ${h}`);
-  const foreign = document.createElementNS("http://www.w3.org/2000/svg", "foreignObject");
-  foreign.setAttribute("x", String(x));
-  foreign.setAttribute("y", String(y));
-  foreign.setAttribute("width", String(w));
-  foreign.setAttribute("height", String(h));
-  const div = document.createElement("div");
-  div.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
-  const wrap = document.createElement("div");
-  wrap.setAttribute(
-    "style",
-    "transform-origin:0 0; position:absolute; inset:0;",
-  );
-  wrap.innerHTML = nodesRoot.outerHTML;
-  div.appendChild(wrap);
-  foreign.appendChild(div);
-  clone.appendChild(foreign);
-  const serializer = new XMLSerializer();
-  return serializer.serializeToString(clone);
-}
-
-export function exportSVG(svgEl: SVGSVGElement, nodesRoot: HTMLElement, project: MMProject, worldId: string) {
-  const nodes = Object.values(project.nodes).filter((n) => n.worldId === worldId);
-  if (!nodes.length) return;
-  let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
-  for (const n of nodes) {
-    x1 = Math.min(x1, n.x);
-    y1 = Math.min(y1, n.y);
-    x2 = Math.max(x2, n.x + n.w);
-    y2 = Math.max(y2, n.y + n.h);
-  }
-  const pad = 40;
-  x1 -= pad; y1 -= pad; x2 += pad; y2 += pad;
-  const data = serializeSVG(svgEl, nodesRoot, x1, y1, x2 - x1, y2 - y1);
-  download(`${project.name.replace(/\s+/g, "-")}.svg`, data, "image/svg+xml");
+export async function exportMapImage(project: MMProject, kind: "svg" | "png") {
+  const { svg, width, height } = mapSVG(project), name = project.name.replace(/[^a-z0-9-]/gi, "-") || "mindmap";
+  if (kind === "svg") { download(`${name}.svg`, svg, "image/svg+xml"); return; }
+  const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+  try {
+    const image = new Image();
+    await new Promise<void>((resolve, reject) => { image.onload = () => resolve(); image.onerror = () => reject(new Error("Could not render image. Download SVG instead.")); image.src = url; });
+    const scale = Math.min(2, 8192 / width, 8192 / height, Math.sqrt(16000000 / (width * height)));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.ceil(width * scale)); canvas.height = Math.max(1, Math.ceil(height * scale));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Image export is unavailable in this browser.");
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(b => b ? resolve(b) : reject(new Error("Image is too large. Download SVG instead.")), "image/png"));
+    const png = URL.createObjectURL(blob), link = document.createElement("a"); link.href = png; link.download = `${name}.png`; link.click();
+    setTimeout(() => URL.revokeObjectURL(png), 5000);
+  } finally { URL.revokeObjectURL(url); }
 }

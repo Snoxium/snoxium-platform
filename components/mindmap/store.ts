@@ -16,6 +16,7 @@ import type {
 import { DEFAULT_SETTINGS } from "./types";
 import { uid, clamp, colorForString } from "./engine";
 import { useSyncExternalStore } from "react";
+import { parseProject } from "./validation";
 
 const STORAGE_KEY = "snoxium.mindmap.v1";
 const SNAPSHOT_KEY = "snoxium.mindmap.snapshots.v1";
@@ -26,6 +27,11 @@ export interface StoreShape {
   ui: MMUIState;
   camera: { x: number; y: number; zoom: number };
   version: number;
+  saveError: string | null;
+  lastSavedAt: number | null;
+  dirty: boolean;
+  recoveryRaw: string | null;
+  needsInitialFit: boolean;
 }
 
 function makeDefaultWorlds(): Record<string, MMWorld> {
@@ -177,6 +183,9 @@ export function createEdge(
   partial: Partial<MMEdge> & Pick<MMEdge, "from" | "to">,
 ): MMEdge | null {
   if (partial.from === partial.to) return null;
+  const fromNode = project.nodes[partial.from];
+  const toNode = project.nodes[partial.to];
+  if (!fromNode || !toNode || fromNode.worldId !== toNode.worldId) return null;
   // Prevent exact duplicates (same world, from, to)
   for (const e of Object.values(project.edges)) {
     if (
@@ -251,17 +260,29 @@ function pushHistory(project: MMProject, kind: string, id: string) {
 }
 
 type Listener = () => void;
+let recoveryRaw: string | null = null;
+let preserveStoredMap = false;
+let loadError: string | null = null;
+let needsInitialFit = false;
 
 function loadProject(): MMProject {
   if (typeof window === "undefined") return seededProject();
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
-      const parsed = JSON.parse(raw) as MMProject;
-      if (parsed.version === 1) return parsed;
+      try { return parseProject(raw); }
+      catch {
+        recoveryRaw = raw;
+        try { localStorage.setItem(`${STORAGE_KEY}.recovery`, raw); }
+        catch { preserveStoredMap = true; }
+        loadError = "Your saved map could not be read. Its original data has been kept; download the recovery file before starting again.";
+        needsInitialFit = true;
+        return seededProject();
+      }
     }
-  } catch {}
+  } catch { loadError = "Browser storage is unavailable. Download backups to keep your map."; }
   const fresh = seededProject();
+  needsInitialFit = true;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));
   } catch {}
@@ -279,6 +300,11 @@ const initial: MMProject = (() => {
 let version = 1;
 const store: StoreShape = {
   project: initial,
+  saveError: loadError,
+  recoveryRaw,
+  needsInitialFit,
+  lastSavedAt: null,
+  dirty: false,
   ui: {
     selectedNodeIds: [],
     selectedEdgeIds: [],
@@ -313,7 +339,7 @@ const redoStack: string[] = [];
 let undoSessionId = 0;
 let undoSessionToken: null | { id: number; count: number } = null;
 function pushUndo(groupToken?: number | null) {
-  if (groupToken != null && undoSessionToken?.id === groupToken) {
+  if (undoSessionToken && (groupToken == null || undoSessionToken.id === groupToken)) {
     undoSessionToken.count++;
     return;
   }
@@ -323,12 +349,12 @@ function pushUndo(groupToken?: number | null) {
 }
 export function beginUndoGroup(): number {
   const id = ++undoSessionId;
-  undoSessionToken = { id, count: 0 };
   pushUndo();
+  undoSessionToken = { id, count: 0 };
   return id;
 }
-export function endUndoGroup(_token: number) {
-  undoSessionToken = null;
+export function endUndoGroup(token: number) {
+  if (undoSessionToken?.id === token) undoSessionToken = null;
 }
 
 const listeners = new Set<Listener>();
@@ -347,13 +373,24 @@ function scheduleAutoSave() {
 }
 
 function persist() {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined") return false;
   try {
+    if (preserveStoredMap) throw new Error("Preserve recovery data");
     localStorage.setItem(STORAGE_KEY, JSON.stringify(store.project));
-  } catch {}
+    store.saveError = store.recoveryRaw ? loadError : null;
+    store.lastSavedAt = Date.now();
+    store.dirty = false;
+    emit();
+    return true;
+  } catch {
+    store.saveError = "Could not save in this browser. Download a JSON backup to keep your changes.";
+    emit();
+    return false;
+  }
 }
 
 function notify() {
+  store.dirty = true;
   store.project.updated = Date.now();
   scheduleAutoSave();
   emit();
@@ -386,29 +423,13 @@ function setPartial(partial: Partial<StoreShape>) {
   emit();
 }
 
-const snapshotCache = new WeakMap<
-  (s: StoreShape) => any,
-  { at: number; value: unknown; box: { value: unknown } }
->();
-
-function read<T>(sel: (s: StoreShape) => T): { value: T } {
-  let entry = snapshotCache.get(sel);
-  if (entry && entry.at === version) {
-    return entry.box as { value: T };
-  }
-  const value = sel(store);
-  const box = { value };
-  snapshotCache.set(sel, { at: version, value, box });
-  return box;
-}
-
 export function useSnapshot<T>(sel: (s: StoreShape) => T): T {
-  const snap = useSyncExternalStore(
+  useSyncExternalStore(
     subscribe,
-    () => read(sel),
-    () => read(sel),
+    () => version,
+    () => version,
   );
-  return snap.value;
+  return sel(store);
 }
 
 export function useStore<T>(sel: (s: StoreShape) => T): T {
@@ -417,7 +438,7 @@ export function useStore<T>(sel: (s: StoreShape) => T): T {
 
 export function worldNodesBoundingBox() {
   const nodes = Object.values(store.project.nodes).filter(
-    (n) => n.worldId === store.project.currentWorldId,
+    (n) => n.worldId === store.project.currentWorldId && !n.hidden,
   );
   if (!nodes.length) return null;
   let x1 = Infinity,
@@ -441,6 +462,8 @@ export const actions = {
       w.camera = { x, y, zoom };
       w.updated = Date.now();
     }
+    store.dirty = true;
+    scheduleAutoSave();
     emit();
   },
   nudgeCamera(dx: number, dy: number) {
@@ -501,10 +524,9 @@ export const actions = {
     const { x, y, zoom } = store.camera;
     const vz = clamp(newZoom, 0.05, 12);
     const ratio = vz / zoom;
-    const cx = viewport ? sx - viewport.w / 2 : sx;
-    const cy = viewport ? sy - viewport.h / 2 : sy;
-    const nx = x - cx * (ratio - 1);
-    const ny = y - cy * (ratio - 1);
+    void viewport;
+    const nx = sx - (sx - x) * ratio;
+    const ny = sy - (sy - y) * ratio;
     actions.setCamera(nx, ny, vz);
   },
   setZoom(z: number) {
@@ -579,6 +601,10 @@ export const actions = {
       color: partial.color,
       icon: partial.icon,
     });
+    if (kind === "world") {
+      n.isWorld = true;
+      n.childWorldId = createChildWorld(p, p.currentWorldId, n.title, "◈");
+    }
     touchNode(n);
     notify();
     actions.selectNode(n.id);
@@ -612,7 +638,7 @@ export const actions = {
     actions.moveNodesRaw(ids, dx, dy, snap, grid);
     notify();
   },
-  resizeNode(id: string, w: number, h: number, _anchor?: "se" | "sw" | "ne" | "nw") {
+  resizeNode(id: string, w: number, h: number) {
     pushUndo();
     const n = store.project.nodes[id];
     if (!n || n.locked) return;
@@ -638,6 +664,24 @@ export const actions = {
     const p = store.project;
     const idMap: Record<string, string> = {};
     const newIds: string[] = [];
+    const originalNodes = Object.values(p.nodes);
+    const originalEdges = Object.values(p.edges);
+    const copyWorld = (worldId: string, parentId: string): string => {
+      const source = p.worlds[worldId];
+      const nextId = createChildWorld(p, parentId, source.name, source.emoji);
+      p.worlds[nextId].camera = source.camera ? { ...source.camera } : undefined;
+      p.worlds[nextId].background = source.background;
+      const mapping: Record<string, string> = {};
+      for (const child of originalNodes.filter(node => node.worldId === worldId)) {
+        const next = createNode(p, { ...child, id: uid(), worldId: nextId });
+        mapping[child.id] = next.id;
+        if (child.childWorldId) next.childWorldId = copyWorld(child.childWorldId, nextId);
+      }
+      for (const edge of originalEdges.filter(edge => edge.worldId === worldId)) {
+        if (mapping[edge.from] && mapping[edge.to]) createEdge(p, { ...edge, id: uid(), worldId: nextId, from: mapping[edge.from], to: mapping[edge.to] });
+      }
+      return nextId;
+    };
     for (const id of ids) {
       const n = p.nodes[id];
       if (!n) continue;
@@ -649,6 +693,7 @@ export const actions = {
         worldId: n.worldId,
       });
       clone.created = Date.now();
+      if (n.childWorldId) clone.childWorldId = copyWorld(n.childWorldId, n.worldId);
       touchNode(clone);
       idMap[id] = clone.id;
       newIds.push(clone.id);
@@ -695,6 +740,8 @@ export const actions = {
   },
   createEdgeFromTo(from: string, to: string) {
     if (from === to) return;
+    const a = store.project.nodes[from], b = store.project.nodes[to];
+    if (!a || !b || a.worldId !== b.worldId || a.worldId !== store.project.currentWorldId) return;
     pushUndo();
     createEdge(store.project, { from, to, worldId: store.project.currentWorldId });
     notify();
@@ -781,7 +828,7 @@ export const actions = {
     const n = store.project.nodes[id];
     if (!n) return;
     pushUndo();
-    (n as any)[flag] = !(n as any)[flag];
+    n[flag] = !n[flag];
     touchNode(n);
     notify();
   },
@@ -819,6 +866,7 @@ export const actions = {
     const w = store.project.worlds[worldId];
     store.camera = w.camera ?? { x: 0, y: 0, zoom: 1 };
     actions.clearSelection();
+    actions.cancelConnect();
     notify();
   },
   leaveToParentWorld() {
@@ -944,6 +992,7 @@ export const actions = {
     notify();
   },
   undo() {
+    undoSessionToken = null;
     const prev = undoStack.pop();
     if (!prev) return;
     redoStack.push(JSON.stringify(store.project));
@@ -953,6 +1002,7 @@ export const actions = {
     notify();
   },
   redo() {
+    undoSessionToken = null;
     const next = redoStack.pop();
     if (!next) return;
     undoStack.push(JSON.stringify(store.project));
@@ -966,16 +1016,17 @@ export const actions = {
     notify();
   },
   saveNow() {
-    persist();
+    return persist();
   },
   exportJSON(): string {
     return JSON.stringify(store.project, null, 2);
   },
   importJSON(text: string) {
-    const parsed = JSON.parse(text) as MMProject;
-    if (parsed.version !== 1) throw new Error("Unsupported version");
+    const parsed = parseProject(text);
     pushUndo();
     store.project = parsed;
+    preserveStoredMap = false;
+    store.ui = { ...store.ui, selectedNodeIds: [], selectedEdgeIds: [], tempEdge: undefined, connectFromId: undefined, connectAwaitFirst: false };
     store.camera =
       store.project.worlds[store.project.currentWorldId]?.camera ?? {
         x: 0,
@@ -1003,7 +1054,10 @@ export const actions = {
       });
       if (snaps.length > 50) snaps.splice(0, snaps.length - 50);
       localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(snaps));
-    } catch {}
+    } catch {
+      store.saveError = "Could not save a snapshot. Download a JSON backup instead.";
+      emit();
+    }
   },
   listSnapshots() {
     if (typeof window === "undefined") return [];
@@ -1024,7 +1078,7 @@ export const actions = {
     const s = snaps.find((x) => x.id === id);
     if (!s) return;
     pushUndo();
-    store.project = JSON.parse(s.data) as MMProject;
+    store.project = parseProject(s.data);
     store.camera =
       store.project.worlds[store.project.currentWorldId]?.camera ?? {
         x: 0,
@@ -1112,5 +1166,9 @@ export function setViewportSize(w: number, h: number) {
 }
 
 if (typeof window !== "undefined") {
-  window.addEventListener("beforeunload", () => persist());
+  window.addEventListener("beforeunload", () => { if (store.dirty) persist(); });
+  window.addEventListener("pagehide", () => { if (store.dirty) persist(); });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden" && store.dirty) persist();
+  });
 }

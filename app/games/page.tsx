@@ -9,12 +9,11 @@ export default function GamesPage() {
           GAMES
         </div>
         <h1 className="text-4xl font-semibold tracking-tight text-zinc-50 sm:text-5xl">
-          Worlds under Snoxium
+          Games from Snoxium
         </h1>
         <p className="max-w-2xl text-sm leading-7 text-zinc-200/70 sm:text-base">
-          Each game lives inside the same ecosystem—shared identity, progression,
-          and systems designed to make Snoxium feel connected instead of
-          fragmented.
+          Explore our mobile, Roblox, Minecraft, and Fortnite projects.
+          Find a game to play, or see what is currently in development.
         </p>
       </div>
 
@@ -23,7 +22,7 @@ export default function GamesPage() {
           <FeatureCard
             key={game.slug}
             title={game.name}
-            eyebrow={game.status}
+            eyebrow={`${game.platform} · ${game.status}`}
             description={game.description}
             href={`/games/${game.slug}`}
             meta={game.tagline}

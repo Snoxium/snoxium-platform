@@ -9,8 +9,7 @@ export function Footer() {
             Snoxium
           </div>
           <p className="text-sm leading-6 text-zinc-200/70">
-            A connected ecosystem where identity, progression, and systems flow
-            between worlds.
+            Independent games and tools across Roblox, mobile, Minecraft, and Fortnite.
           </p>
         </div>
         <div className="grid grid-cols-2 gap-8 text-sm text-zinc-200/70">
@@ -47,14 +46,8 @@ export function Footer() {
             <div className="text-xs font-medium tracking-widest text-zinc-200/60">
               SOCIAL
             </div>
-            <a className="block transition hover:text-zinc-50" href="#">
+            <a className="block transition hover:text-zinc-50" href="https://discord.gg/4sjDgwQNgj" target="_blank" rel="noopener noreferrer">
               Discord
-            </a>
-            <a className="block transition hover:text-zinc-50" href="#">
-              X / Twitter
-            </a>
-            <a className="block transition hover:text-zinc-50" href="#">
-              YouTube
             </a>
           </div>
         </div>
@@ -63,8 +56,8 @@ export function Footer() {
             STATUS
           </div>
           <p className="text-sm leading-6 text-zinc-200/70">
-            Building core platform systems while shipping the first worlds:
-            Stardew Network, Lunar Fish, Trash Tycoon, Runalong.
+            Explore Runalong, Cleanup Club, Steal a Box, and Slashbound.
+            Plants vs Food is currently in development.
           </p>
           <p className="text-xs text-zinc-200/50">
             © {new Date().getFullYear()} Snoxium Games Ltd. All rights reserved.

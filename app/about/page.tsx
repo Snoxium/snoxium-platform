@@ -12,10 +12,9 @@ export default function AboutPage() {
             Snoxium Platform
           </h1>
           <p className="max-w-2xl text-sm leading-7 text-zinc-200/70 sm:text-base">
-            Snoxium is an ecosystem built to connect worlds, games and
-            communities. It’s not a single title—it’s an identity layer and a
-            set of shared systems that make every experience feel like it belongs
-            to the same universe.
+            Snoxium is an independent studio making games and practical tools.
+            Our projects span Roblox, mobile, Minecraft, and Fortnite: from
+            Runalong and Cleanup Club to Steal a Box and Slashbound.
           </p>
           <div className="flex flex-col gap-3 sm:flex-row">
             <Link
@@ -43,16 +42,16 @@ export default function AboutPage() {
               ecosystem.
             </li>
             <li>
-              Shared progression, identity, and economy—built once, experienced
-              everywhere.
+              Clear progression, satisfying feedback, and useful updates driven
+              by how each game plays.
             </li>
             <li>
               Multiplayer-first systems that scale with communities and
               server networks.
             </li>
             <li>
-              Worlds that feel distinct, but never disconnected from the
-              platform.
+              Distinct worlds with their own characters, challenges, and reasons
+              to explore.
             </li>
           </ul>
         </div>

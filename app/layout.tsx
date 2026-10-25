@@ -19,7 +19,8 @@ export const metadata: Metadata = {
     default: "Snoxium",
     template: "%s · Snoxium",
   },
-  description: "Connected worlds, games, and experiences.",
+  metadataBase: new URL("https://www.snoxium.com"),
+  description: "Independent games and tools: Runalong, Cleanup Club, Steal a Box, Slashbound, and more from Snoxium.",
 };
 
 export default function RootLayout({

@@ -1,765 +1,223 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { beginUndoGroup, endUndoGroup, setViewportSize, actions, useStore, getState, bumpVersion, bumpSilent, flushNotify } from "./store";
+import { memo, useEffect, useRef } from "react";
+import { actions, beginUndoGroup, endUndoGroup, getState, useStore, setViewportSize, bumpVersion, flushNotify } from "./store";
+import { bezierPoints, nearestAnchor, screenToWorld } from "./engine";
 import type { MMNode } from "./types";
-import { NodeView } from "./Node";
-import { EdgesLayer } from "./Edges";
-import { pointInRect, screenToWorld } from "./engine";
+
+type Drag = {
+  pointerId: number; mode: "pan" | "nodes" | "connect" | "resize";
+  startX: number; startY: number; camera: { x: number; y: number; zoom: number };
+  positions: Array<{ id: string; x: number; y: number; w: number; h: number }>;
+  from?: string; undo?: number; moved: boolean;
+};
 
 export function Canvas() {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const project = useStore((s) => s.project);
-  const camera = useStore((s) => s.camera);
-  const ui = useStore((s) => s.ui);
-  const [_version, setVersion] = useState(0);
-  const size = useStore(() => 1);
-  void size;
-
-  // Hybrid zoom mode:
-  // - When zoom is changing (wheel, +/-, slider) -> transform scale (pure GPU, no layout reflow = fast)
-  // - After 250ms of zoom inactivity -> snap to CSS zoom (re-layouts text glyphs = pixel-perfect crisp)
-  const zoomRef = useRef<"gpu" | "crisp">("crisp");
-  const zoomIdleTimer = useRef<number | null>(null);
-  const lastCameraZoomSeen = useRef<number>(camera.zoom);
-
-  const kickZoomDirty = useCallback(() => {
-    zoomRef.current = "gpu";
-    if (zoomIdleTimer.current != null) window.clearTimeout(zoomIdleTimer.current);
-    zoomIdleTimer.current = window.setTimeout(() => {
-      zoomRef.current = "crisp";
-      setVersion((x) => x + 1);
-    }, 220);
-  }, []);
-
-  if (Math.abs(lastCameraZoomSeen.current - camera.zoom) > 1e-6) {
-    lastCameraZoomSeen.current = camera.zoom;
-    kickZoomDirty();
-  }
-
-  const settings = project.settings;
-  const [hoveredId, setHoveredId] = useState<string | undefined>();
-
-  const dragState = useRef<{
-    mode:
-      | null
-      | "pan"
-      | "nodes"
-      | "resize"
-      | "connect"
-      | "marquee";
-    startX: number;
-    startY: number;
-    lastX: number;
-    lastY: number;
-    vx: number;
-    vy: number;
-    moved: boolean;
-    nodeId?: string;
-    origPos?: Map<string, { x: number; y: number }>;
-    origCamera?: { x: number; y: number };
-    resizeHandle?: string;
-    origSize?: { w: number; h: number; x: number; y: number };
-    connectingFrom?: string;
-    space?: boolean;
-    shift?: boolean;
-    startSel?: string[];
-    undoGroup?: number;
-  }>({ mode: null, startX: 0, startY: 0, lastX: 0, lastY: 0, vx: 0, vy: 0, moved: false });
-
-  const inertiaRef = useRef<number | null>(null);
-  const keys = useRef<Record<string, boolean>>({});
-  const lastTick = useRef<number>(0);
-  const keys2 = useRef<Record<string, boolean>>({});
-  const sizeState = useRef<{ w: number; h: number }>({ w: 1200, h: 800 });
-  const [dims, setDims] = useState({ w: 1200, h: 800 });
-
-  const worldId = project.currentWorldId;
-  const currentWorld = project.worlds[worldId];
-
-  const visibleNodes: MMNode[] = useMemo(
-    () =>
-      Object.values(getState().project.nodes)
-        .filter((n) => n.worldId === worldId && !n.hidden)
-        .map((n) => ({ ...n })),
-    [worldId, _version],
-  );
-  const visibleEdges = useMemo(
-    () => Object.values(getState().project.edges).filter((e) => e.worldId === worldId),
-    [worldId, _version],
-  );
-  const nodesById = useMemo(() => {
-    const m: Record<string, MMNode> = {};
-    for (const n of visibleNodes) m[n.id] = n;
-    return m;
-  }, [visibleNodes]);
-
-  const onResize = useCallback(() => {
-    const el = containerRef.current;
-    if (el) {
-      const w = el.clientWidth || 1200;
-      const h = el.clientHeight || 800;
-      setViewportSize(w, h);
-      sizeState.current = { w, h };
-      setDims({ w, h });
-    }
-  }, []);
+  const container = useRef<HTMLDivElement>(null);
+  const drag = useRef<Drag | null>(null);
+  const frame = useRef(0);
+  const pending = useRef<{ x: number; y: number } | null>(null);
+  const state = useStore(s => s);
+  const { project, camera, ui } = state;
+  const nodes = Object.values(project.nodes).filter(n => n.worldId === project.currentWorldId && !n.hidden);
+  const edges = Object.values(project.edges).filter(e => e.worldId === project.currentWorldId);
 
   useEffect(() => {
-    onResize();
-    const ro = new ResizeObserver(onResize);
-    if (containerRef.current) ro.observe(containerRef.current);
-    window.addEventListener("resize", onResize);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener("resize", onResize);
-    };
-  }, [onResize]);
-
-  const moveCameraBy = useCallback((dx: number, dy: number) => {
-    actions.nudgeCamera(dx, dy);
-  }, []);
-
-  useEffect(() => {
-    if (!settings.wasdEnabled) return;
-    let raf = 0;
-    const tick = () => {
-      const speed = 10 / Math.max(0.2, camera.zoom);
-      let dx = 0,
-        dy = 0;
-      if (keys2.current["w"] || keys2.current["arrowup"]) dy += speed;
-      if (keys2.current["s"] || keys2.current["arrowdown"]) dy -= speed;
-      if (keys2.current["a"] || keys2.current["arrowleft"]) dx += speed;
-      if (keys2.current["d"] || keys2.current["arrowright"]) dx -= speed;
-      if (dx || dy) moveCameraBy(dx, dy);
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    const d = (e: KeyboardEvent) => {
-      const tgt = e.target as HTMLElement;
-      const tag = tgt?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tgt?.isContentEditable) return;
-      keys2.current[e.key.toLowerCase()] = true;
-    };
-    const u = (e: KeyboardEvent) => {
-      const tgt = e.target as HTMLElement;
-      const tag = tgt?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tgt?.isContentEditable) return;
-      keys2.current[e.key.toLowerCase()] = false;
-    };
-    window.addEventListener("keydown", d);
-    window.addEventListener("keyup", u);
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener("keydown", d);
-      window.removeEventListener("keyup", u);
-    };
-  }, [camera.zoom, settings.wasdEnabled, moveCameraBy]);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const onWheel = (e: WheelEvent) => {
-      const rect = el.getBoundingClientRect();
-      const sx = e.clientX - rect.left;
-      const sy = e.clientY - rect.top;
-      if (e.shiftKey) {
-        e.preventDefault();
-        const dx = Math.abs(e.deltaX) > 1 ? e.deltaX : e.deltaY;
-        actions.nudgeCamera(-dx, -e.deltaY);
-        return;
-      }
+    const element = container.current;
+    if (!element) return;
+    const measure = () => setViewportSize(element.clientWidth, element.clientHeight);
+    measure();
+    if (getState().needsInitialFit) {
+      getState().needsInitialFit = false;
+      actions.resetCamera();
+    }
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    const wheel = (e: WheelEvent) => {
+      // Leave native scrolling to controls sitting above the canvas.
       e.preventDefault();
-      const factor = Math.exp(-e.deltaY * 0.0015);
-      const curCam = getState().camera;
-      actions.zoomAt(sx, sy, curCam.zoom * factor, {
-        w: rect.width,
-        h: rect.height,
-      });
+      const rect = element.getBoundingClientRect();
+      if (e.shiftKey) actions.nudgeCamera(-(e.deltaX || e.deltaY), 0);
+      else if (Math.abs(e.deltaX) > 0 && !e.ctrlKey) actions.nudgeCamera(-e.deltaX, -e.deltaY);
+      else actions.zoomAt(e.clientX - rect.left, e.clientY - rect.top, getState().camera.zoom * Math.exp(-e.deltaY * 0.0015));
     };
-    el.addEventListener("wheel", onWheel, { passive: false });
+    element.addEventListener("wheel", wheel, { passive: false });
     return () => {
-      el.removeEventListener("wheel", onWheel);
+      observer.disconnect();
+      element.removeEventListener("wheel", wheel);
+      cancelAnimationFrame(frame.current);
+      if (drag.current?.undo != null) endUndoGroup(drag.current.undo);
     };
   }, []);
 
-  const snap = (v: number) =>
-    settings.snapToGrid ? Math.round(v / settings.gridSize) * settings.gridSize : v;
-
-  const onPointerDown = (e: React.PointerEvent) => {
-    const el = containerRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const sx = e.clientX - rect.left;
-    const sy = e.clientY - rect.top;
-    const wp = screenToWorld(sx, sy, camera.x, camera.y, camera.zoom);
-
-    const target = e.target as HTMLElement;
-    const portSide = target.getAttribute?.("data-port");
-    const resizeH = target.getAttribute?.("data-resize");
-    const nodeEl = target.closest?.("[data-node-id]") as HTMLElement | null;
-    const nodeId = nodeEl?.getAttribute("data-node-id") || undefined;
-
-    const isLeft = e.button === 0;
-    const isMiddle = e.button === 1;
-    const isSpacePan = keys.current[" "] === true || dragState.current.space === true;
-    if (isMiddle || isSpacePan || e.button === 2) {
-      dragState.current = {
-        mode: "pan",
-        startX: sx,
-        startY: sy,
-        lastX: sx,
-        lastY: sy,
-        vx: 0,
-        vy: 0,
-        moved: false,
-        origCamera: { x: camera.x, y: camera.y },
-      };
-      (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
-      e.preventDefault();
-      return;
-    }
-
-    if (portSide && nodeId && isLeft) {
-      dragState.current = {
-        mode: "connect",
-        startX: sx,
-        startY: sy,
-        lastX: sx,
-        lastY: sy,
-        vx: 0,
-        vy: 0,
-        moved: false,
-        connectingFrom: nodeId,
-      };
-      actions.setTempEdge({ from: nodeId, toX: wp.x, toY: wp.y });
-      (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
-      e.preventDefault();
-      return;
-    }
-
-    if (resizeH && nodeId && isLeft) {
-      const n = project.nodes[nodeId];
-      if (!n || n.locked) return;
-      dragState.current = {
-        mode: "resize",
-        startX: sx,
-        startY: sy,
-        lastX: sx,
-        lastY: sy,
-        vx: 0,
-        vy: 0,
-        moved: false,
-        nodeId,
-        resizeHandle: resizeH,
-        origSize: { x: n.x, y: n.y, w: n.w, h: n.h },
-      };
-      dragState.current.undoGroup = beginUndoGroup();
-      (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
-      e.preventDefault();
-      return;
-    }
-
-    if (nodeId && isLeft) {
-      const isSelected = ui.selectedNodeIds.includes(nodeId);
-      const additive = e.shiftKey;
-      let selection: string[];
-      if (additive) {
-        selection = isSelected
-          ? ui.selectedNodeIds.filter((x) => x !== nodeId)
-          : [...ui.selectedNodeIds, nodeId];
-        actions.selectNode(selection, false);
-      } else if (!isSelected) {
-        actions.selectNode(nodeId, false);
-        selection = [nodeId];
-      } else {
-        selection = ui.selectedNodeIds;
-      }
-      const positions = new Map<string, { x: number; y: number }>();
-      for (const id of selection) {
-        const n = project.nodes[id];
-        if (n) positions.set(id, { x: n.x, y: n.y });
-      }
-      dragState.current = {
-        mode: "nodes",
-        startX: sx,
-        startY: sy,
-        lastX: sx,
-        lastY: sy,
-        vx: 0,
-        vy: 0,
-        moved: false,
-        nodeId,
-        origPos: positions,
-        shift: additive,
-        startSel: [...selection],
-      };
-      dragState.current.undoGroup = beginUndoGroup();
-      (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
-      e.stopPropagation();
-      return;
-    }
-
-    if (!isLeft) return;
-
-    dragState.current = {
-      mode: "marquee",
-      startX: sx,
-      startY: sy,
-      lastX: sx,
-      lastY: sy,
-      vx: 0,
-      vy: 0,
-      moved: false,
-      shift: e.shiftKey,
-      startSel: e.shiftKey ? [...ui.selectedNodeIds] : [],
-    };
-    actions.setMarquee({ x1: sx, y1: sy, x2: sx, y2: sy });
-    if (!e.shiftKey) actions.clearSelection();
-    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+  const point = (x: number, y: number) => {
+    const rect = container.current!.getBoundingClientRect();
+    return screenToWorld(x - rect.left, y - rect.top, getState().camera.x, getState().camera.y, getState().camera.zoom);
   };
-
-  const _raf = useRef<number>(0);
-  const _pendingMove = useRef<{ sx: number; sy: number; e: null | React.PointerEvent } | null>(null);
-
-  const onPointerMove = (e: React.PointerEvent) => {
-    const el = containerRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const sx = e.clientX - rect.left;
-    const sy = e.clientY - rect.top;
-
-    const nodeHoverEl = (e.target as HTMLElement).closest?.("[data-node-id]") as HTMLElement | null;
-    const hov = nodeHoverEl?.getAttribute("data-node-id") || undefined;
-    if (hov !== hoveredId) setHoveredId(hov);
-
-    const st = dragState.current;
-    const dx = sx - st.lastX;
-    const dy = sy - st.lastY;
-    if (Math.abs(sx - st.startX) + Math.abs(sy - st.startY) > 3) st.moved = true;
-    const now = performance.now();
-    const dt = Math.max(1, now - (lastTick.current || now));
-    lastTick.current = now;
-    st.vx = dx * (16 / dt);
-    st.vy = dy * (16 / dt);
-    st.lastX = sx;
-    st.lastY = sy;
-
-    if (!st.mode) return;
-
-    const wp = screenToWorld(sx, sy, camera.x, camera.y, camera.zoom);
-
-    if (st.mode === "pan") {
-      actions.nudgeCamera(dx, dy);
-      return;
-    }
-    if (st.mode === "connect" && st.connectingFrom) {
-      const state = getState();
-      state.ui.tempEdge = { from: st.connectingFrom, toX: wp.x, toY: wp.y };
-      bumpSilent();
-      setVersion((v) => v + 1);
-      return;
-    }
-    const preConnectState = getState();
-    if (preConnectState.ui.connectFromId && !st.mode) {
-      preConnectState.ui.tempEdge = { from: preConnectState.ui.connectFromId, toX: wp.x, toY: wp.y };
-      bumpSilent();
-      setVersion((v) => v + 1);
-    }
-
-    // Batch nodes/resize/marquee into RAF to drop duplicate commits
-    if (_pendingMove.current == null) {
-      _pendingMove.current = { sx, sy, e: null };
-      _raf.current = requestAnimationFrame(() => {
-        const p = _pendingMove.current!;
-        _pendingMove.current = null;
-        const ssx = p.sx;
-        const ssy = p.sy;
-        const sst = dragState.current;
-        if (sst.mode === "nodes" && sst.origPos) {
-          const wdx = (ssx - sst.startX) / camera.zoom;
-          const wdy = (ssy - sst.startY) / camera.zoom;
-          let any = false;
-          const latestNodes = getState().project.nodes;
-          for (const [id, orig] of sst.origPos) {
-            const n = latestNodes[id];
-            if (!n || n.locked) continue;
-            const nx = snap(orig.x + wdx);
-            const ny = snap(orig.y + wdy);
-            if (n.x !== nx || n.y !== ny) {
-              n.x = nx;
-              n.y = ny;
-              n.updated = Date.now();
-              any = true;
-            }
-          }
-          if (any) {
-            bumpSilent();
-            setVersion((v) => v + 1);
-          }
-        } else if (sst.mode === "resize" && sst.nodeId && sst.origSize) {
-          const wdx = (ssx - sst.startX) / camera.zoom;
-          const wdy = (ssy - sst.startY) / camera.zoom;
-          const n = getState().project.nodes[sst.nodeId];
-          if (!n || n.locked) return;
-          const { x: ox, y: oy, w: ow, h: oh } = sst.origSize;
-          const handle = sst.resizeHandle ?? "se";
-          let nx = ox,
-            ny = oy,
-            nw = ow,
-            nh = oh;
-          if (handle.includes("e")) nw = Math.max(80, ow + wdx);
-          if (handle.includes("s")) nh = Math.max(60, oh + wdy);
-          if (handle.includes("w")) {
-            const newW = Math.max(80, ow - wdx);
-            nx = ox + (ow - newW);
-            nw = newW;
-          }
-          if (handle.includes("n")) {
-            const newH = Math.max(60, oh - wdy);
-            ny = oy + (oh - newH);
-            nh = newH;
-          }
-          if (
-            Math.abs(nx - n.x) > 0.1 ||
-            Math.abs(ny - n.y) > 0.1 ||
-            Math.abs(nw - n.w) > 0.1 ||
-            Math.abs(nh - n.h) > 0.1
-          ) {
-            n.x = nx;
-            n.y = ny;
-            n.w = nw;
-            n.h = nh;
-            n.updated = Date.now();
-            bumpSilent();
-            setVersion((v) => v + 1);
-          }
-        } else if (sst.mode === "marquee") {
-          const gstate = getState();
-          gstate.ui.marquee = { x1: sst.startX, y1: sst.startY, x2: ssx, y2: ssy };
-          const wx1 = Math.min(sst.startX, ssx);
-          const wy1 = Math.min(sst.startY, ssy);
-          const wx2 = Math.max(sst.startX, ssx);
-          const wy2 = Math.max(sst.startY, ssy);
-          const w1 = screenToWorld(wx1, wy1, camera.x, camera.y, camera.zoom);
-          const w2 = screenToWorld(wx2, wy2, camera.x, camera.y, camera.zoom);
-          const r = { x: w1.x, y: w1.y, w: w2.x - w1.x, h: w2.y - w1.y };
-          const hit: string[] = [...(sst.startSel ?? [])];
-          for (const n of visibleNodes) {
-            if (hit.includes(n.id)) continue;
-            if (
-              pointInRect({ x: n.x + n.w / 2, y: n.y + n.h / 2 }, r) ||
-              pointInRect({ x: n.x, y: n.y }, r)
-            ) {
-              hit.push(n.id);
-            }
-          }
-          gstate.ui.selectedNodeIds = hit.length ? hit : (sst.startSel ?? []);
-          gstate.ui.selectedEdgeIds = [];
-          bumpSilent();
-          setVersion((v) => v + 1);
-        }
-      });
+  const move = (x: number, y: number) => {
+    const current = drag.current;
+    if (!current) return;
+    const dx = x - current.startX;
+    const dy = y - current.startY;
+    if (!current.moved && Math.abs(dx) + Math.abs(dy) < 3) return;
+    current.moved = true;
+    if (current.mode === "pan") {
+      actions.setCamera(current.camera.x + dx, current.camera.y + dy, current.camera.zoom);
+    } else if (current.mode === "connect" && current.from) {
+      const p = point(x, y);
+      actions.setTempEdge({ from: current.from, toX: p.x, toY: p.y });
     } else {
-      _pendingMove.current!.sx = sx;
-      _pendingMove.current!.sy = sy;
-    }
-  };
-
-  const onPointerUp = (e: React.PointerEvent) => {
-    const st = dragState.current;
-    if (_raf.current) cancelAnimationFrame(_raf.current); _raf.current = 0;
-    _pendingMove.current = null;
-    try {
-      (e.currentTarget as Element).releasePointerCapture?.(e.pointerId);
-    } catch {}
-    if (st.mode === "nodes" || st.mode === "resize" || st.mode === "marquee" || st.mode === "connect") {
-      flushNotify();
-    }
-    const el = containerRef.current;
-    const rect = el?.getBoundingClientRect();
-    const sx = rect ? e.clientX - rect.left : 0;
-    const sy = rect ? e.clientY - rect.top : 0;
-
-    if (st.undoGroup != null) {
-      endUndoGroup(st.undoGroup);
-      st.undoGroup = undefined;
-    }
-
-    if (st.mode === "connect" && st.connectingFrom) {
-      const nodeHover = (e.target as HTMLElement).closest?.("[data-node-id]") as HTMLElement | null;
-      const toId = nodeHover?.getAttribute("data-node-id") || undefined;
-      if (toId && toId !== st.connectingFrom) {
-        actions.createEdgeFromTo(st.connectingFrom, toId);
-      }
-      actions.setTempEdge(undefined);
-      flushNotify();
-    }
-
-    const stateNow = getState();
-    const nodeHover = (e.target as HTMLElement).closest?.("[data-node-id]") as HTMLElement | null;
-    const nodeId = nodeHover?.getAttribute("data-node-id") || undefined;
-    if ((stateNow.ui.connectFromId || stateNow.ui.connectAwaitFirst) && !st.moved && e.button === 0) {
-      if (stateNow.ui.connectAwaitFirst && nodeId) {
-        actions.startConnect(nodeId);
-      } else if (stateNow.ui.connectFromId && nodeId && nodeId !== stateNow.ui.connectFromId) {
-        actions.createEdgeFromTo(stateNow.ui.connectFromId, nodeId);
-        actions.cancelConnect();
-      } else {
-        actions.cancelConnect();
-      }
-    }
-
-    if (st.mode === "marquee") {
-      getState().ui.marquee = undefined;
-    }
-
-    if (st.mode === "pan" && settings.inertiaEnabled) {
-      const doInertia = () => {
-        if (Math.abs(st.vx) < 0.05 && Math.abs(st.vy) < 0.05) {
-          inertiaRef.current = null;
-          return;
+      if (current.undo == null) current.undo = beginUndoGroup();
+      const settings = getState().project.settings;
+      const snap = (v: number) => settings.snapToGrid ? Math.round(v / settings.gridSize) * settings.gridSize : v;
+      for (const original of current.positions) {
+        const node = getState().project.nodes[original.id];
+        if (!node || node.locked) continue;
+        if (current.mode === "resize") {
+          node.w = Math.max(160, snap(original.w + dx / current.camera.zoom));
+          node.h = Math.max(100, snap(original.h + dy / current.camera.zoom));
+        } else {
+          node.x = snap(original.x + dx / current.camera.zoom);
+          node.y = snap(original.y + dy / current.camera.zoom);
         }
-        actions.nudgeCamera(st.vx, st.vy);
-        st.vx *= 0.93;
-        st.vy *= 0.93;
-        inertiaRef.current = requestAnimationFrame(doInertia);
-      };
-      if (inertiaRef.current) cancelAnimationFrame(inertiaRef.current);
-      if (Math.abs(st.vx) + Math.abs(st.vy) > 0.5)
-        inertiaRef.current = requestAnimationFrame(doInertia);
-    }
-
-    if (!st.moved && e.button === 0 && !st.nodeId && st.mode === "marquee") {
-      const nodeHover = (e.target as HTMLElement).closest?.("[data-node-id]") as HTMLElement | null;
-      if (!nodeHover) actions.clearSelection();
-    }
-
-    void sx;
-    void sy;
-
-    dragState.current = {
-      ...dragState.current,
-      mode: null,
-      moved: false,
-      connectingFrom: undefined,
-      origPos: undefined,
-      origSize: undefined,
-      origCamera: undefined,
-      startSel: undefined,
-    };
-  };
-
-  useEffect(() => {
-    const down = (e: KeyboardEvent) => {
-      const tgt = e.target as HTMLElement;
-      const tag = tgt?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tgt?.isContentEditable) return;
-      if (e.key === " ") {
-        keys.current[" "] = true;
-        dragState.current.space = true;
-        if (containerRef.current) containerRef.current.style.cursor = "grab";
+        node.updated = Date.now();
+        node._v = (node._v ?? 0) + 1;
       }
-    };
-    const up = (e: KeyboardEvent) => {
-      if (e.key === " ") {
-        keys.current[" "] = false;
-        dragState.current.space = false;
-        if (containerRef.current) containerRef.current.style.cursor = "";
-      }
-    };
-    window.addEventListener("keydown", down);
-    window.addEventListener("keyup", up);
-    return () => {
-      window.removeEventListener("keydown", down);
-      window.removeEventListener("keyup", up);
-    };
-  }, []);
-
-  const onContextMenu = (e: React.MouseEvent) => {
-    e.preventDefault();
-  };
-
-  const onDoubleClick = (e: React.MouseEvent) => {
-    const target = e.target as HTMLElement;
-    const nodeEl = target.closest?.("[data-node-id]") as HTMLElement | null;
-    if (nodeEl) {
-      return;
+      bumpVersion();
     }
-    const el = containerRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const sx = e.clientX - rect.left;
-    const sy = e.clientY - rect.top;
-    const wp = screenToWorld(sx, sy, camera.x, camera.y, camera.zoom);
-    actions.createNodeAt(wp.x, wp.y);
   };
-
-  const gridBgStyle = (() => {
-    if (!settings.gridEnabled) return {};
-    const size = settings.gridSize * camera.zoom;
-    const majorSize = size * 5;
-    return {
-      backgroundImage:
-        "radial-gradient(circle, var(--mm-grid-line) 1px, transparent 1px), radial-gradient(circle, var(--mm-grid-major) 1px, transparent 1px)",
-      backgroundSize: `${size}px ${size}px, ${majorSize}px ${majorSize}px`,
-      backgroundPosition: `${camera.x}px ${camera.y}px, ${camera.x}px ${camera.y}px`,
-    };
-  })();
-
-  const uiLive = getState().ui;
-  const marqueeRect = uiLive.marquee
-    ? (() => {
-        const x = Math.min(uiLive.marquee!.x1, uiLive.marquee!.x2);
-        const y = Math.min(uiLive.marquee!.y1, uiLive.marquee!.y2);
-        const w = Math.abs(uiLive.marquee!.x2 - uiLive.marquee!.x1);
-        const h = Math.abs(uiLive.marquee!.y2 - uiLive.marquee!.y1);
-        return { x, y, w, h };
-      })()
-    : null;
+  const finish = (e: React.PointerEvent, cancelled = false) => {
+    const current = drag.current;
+    if (!current || current.pointerId !== e.pointerId) return;
+    cancelAnimationFrame(frame.current);
+    frame.current = 0;
+    pending.current = null;
+    if (!cancelled) move(e.clientX, e.clientY);
+    if (current.mode === "connect" && current.from && !cancelled) {
+      // Pointer capture changes e.target; hit-test the actual release position.
+      const target = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>("[data-node-id]");
+      const to = target?.dataset.nodeId;
+      if (to && to !== current.from) {
+        actions.createEdgeFromTo(current.from, to);
+        actions.cancelConnect();
+      } else if (!current.moved) actions.startConnect(current.from);
+    }
+    actions.setTempEdge(undefined);
+    if (current.undo != null) {
+      endUndoGroup(current.undo);
+      flushNotify();
+    }
+    drag.current = null;
+    if (container.current?.hasPointerCapture(e.pointerId)) container.current.releasePointerCapture(e.pointerId);
+  };
 
   return (
-    <div
-      ref={containerRef}
-      data-mindmap-canvas
-      className="relative h-full w-full overflow-hidden rounded-2xl"
+    <div ref={container} data-mindmap-canvas className="mm-canvas" aria-label="Mindmap canvas" tabIndex={0}
       style={{
-        ...gridBgStyle,
-        touchAction: "none",
-        overscrollBehavior: "contain",
-        background: "var(--mm-canvas-bg)",
-        border: "1px solid var(--mm-panel-border)",
-        cursor:
-          ui.connectFromId || ui.connectAwaitFirst ? "crosshair" : "default",
+        backgroundImage: project.settings.gridEnabled ? "radial-gradient(circle, #ffffff16 1px, transparent 1px)" : undefined,
+        backgroundSize: `${project.settings.gridSize * camera.zoom}px ${project.settings.gridSize * camera.zoom}px`,
+        backgroundPosition: `${camera.x}px ${camera.y}px`,
+        cursor: ui.connectFromId || ui.connectAwaitFirst ? "crosshair" : undefined,
       }}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
-      onDoubleClick={onDoubleClick}
-      onContextMenu={onContextMenu}
-      tabIndex={0}
-    >
-      {settings.rulersEnabled && <Rulers camera={camera} />}
-
-      <div
-        className="absolute left-0 top-0 will-change-transform"
-        style={
-          zoomRef.current === "crisp"
-            ? {
-                zoom: camera.zoom,
-                transform: `translate3d(${Math.round(camera.x / camera.zoom)}px, ${Math.round(camera.y / camera.zoom)}px, 0)`,
-                transformOrigin: "0 0",
-                width: `${dims.w}px`,
-                height: `${dims.h}px`,
-              }
-            : {
-                transform: `translate3d(${Math.round(camera.x)}px, ${Math.round(camera.y)}px, 0) scale(${camera.zoom})`,
-                transformOrigin: "0 0",
-                width: `${dims.w}px`,
-                height: `${dims.h}px`,
-              }
+      onContextMenu={e => e.preventDefault()}
+      onDoubleClick={e => {
+        if ((e.target as Element).closest("[data-node-id], button, input, textarea")) return;
+        const p = point(e.clientX, e.clientY);
+        actions.createNodeAt(p.x, p.y);
+      }}
+      onPointerDown={e => {
+        if (drag.current || ![0, 1, 2].includes(e.button)) return;
+        const target = e.target as Element;
+        if (target.closest("input, textarea, select, a, [data-edge-id]")) return;
+        const nodeId = target.closest<HTMLElement>("[data-node-id]")?.dataset.nodeId;
+        const port = target.closest("[data-port]");
+        const resize = target.closest("[data-resize]");
+        if (target.closest("button") && !port && !resize) return;
+        if (e.button === 0 && nodeId && (ui.connectFromId || ui.connectAwaitFirst) && !port) {
+          if (ui.connectFromId && ui.connectFromId !== nodeId) {
+            actions.createEdgeFromTo(ui.connectFromId, nodeId);
+            actions.cancelConnect();
+          } else actions.startConnect(nodeId);
+          e.preventDefault();
+          return;
         }
-      >
-        <EdgesLayer
-          edges={visibleEdges}
-          nodesById={nodesById}
-          worldId={worldId}
-          hoveredId={uiLive.hoveredEdgeId}
-          selectedIds={uiLive.selectedEdgeIds}
-          tempEdge={uiLive.tempEdge}
-          width={dims.w}
-          height={dims.h}
-        />
-        <div className="absolute left-0 top-0" style={{ pointerEvents: "auto" }}>
-          {visibleNodes.map((n) => (
-            <NodeView
-              key={n.id}
-              node={n}
-              selected={uiLive.selectedNodeIds.includes(n.id)}
-              hovered={hoveredId === n.id || uiLive.hoveredNodeId === n.id}
-              tagsById={project.tags}
-            />
-          ))}
-        </div>
+        let mode: Drag["mode"] = "pan";
+        let selected: string[] = [];
+        if (e.button === 0 && nodeId) {
+          if (port) mode = "connect";
+          else if (resize) mode = "resize";
+          else mode = "nodes";
+          selected = ui.selectedNodeIds.includes(nodeId) ? ui.selectedNodeIds : [nodeId];
+          if (e.shiftKey && mode === "nodes") {
+            selected = ui.selectedNodeIds.includes(nodeId) ? ui.selectedNodeIds.filter(id => id !== nodeId) : [...ui.selectedNodeIds, nodeId];
+          }
+          actions.selectNode(selected);
+        } else if (!e.shiftKey) {
+          actions.clearSelection();
+          actions.cancelConnect();
+        }
+        drag.current = {
+          pointerId: e.pointerId, mode, startX: e.clientX, startY: e.clientY, camera: { ...getState().camera },
+          positions: selected.map(id => getState().project.nodes[id]).filter(Boolean).map(n => ({ id: n.id, x: n.x, y: n.y, w: n.w, h: n.h })),
+          from: nodeId, moved: false,
+        };
+        container.current?.focus({ preventScroll: true });
+        e.currentTarget.setPointerCapture(e.pointerId);
+        e.preventDefault();
+      }}
+      onPointerMove={e => {
+        if (!drag.current || drag.current.pointerId !== e.pointerId) return;
+        pending.current = { x: e.clientX, y: e.clientY };
+        if (frame.current) return;
+        frame.current = requestAnimationFrame(() => {
+          frame.current = 0;
+          const p = pending.current;
+          pending.current = null;
+          if (p) move(p.x, p.y);
+        });
+      }}
+      onPointerUp={e => finish(e)}
+      onPointerCancel={e => finish(e, true)}
+    >
+      <div data-mindmap-nodes className="mm-world" style={{ transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.zoom})` }}>
+        <svg data-mindmap-layer className="mm-edges" width="1" height="1" aria-label="Connections">
+          <defs><marker id="mm-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 Z" fill="#94a3b8" /></marker></defs>
+          {edges.map(edge => {
+            const a = project.nodes[edge.from], b = project.nodes[edge.to];
+            if (!a || !b || a.hidden || b.hidden) return null;
+            const shape = bezierPoints(nearestAnchor(a, { x: b.x + b.w / 2, y: b.y + b.h / 2 }), nearestAnchor(b, { x: a.x + a.w / 2, y: a.y + a.h / 2 }), edge.style ?? "bezier");
+            const selected = ui.selectedEdgeIds.includes(edge.id);
+            return <g key={edge.id} data-edge-id={edge.id} role="button" tabIndex={0} aria-label={`Connection: ${a.title} to ${b.title}`} style={{ pointerEvents: "auto", cursor: "pointer" }}
+              onPointerDown={e => { e.stopPropagation(); actions.selectEdge(edge.id); }}
+              onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); actions.selectEdge(edge.id); } }}>
+              <path d={shape.d} stroke="transparent" strokeWidth={18} fill="none" />
+              <path d={shape.d} stroke={selected ? "#22d3ee" : edge.color ?? "#94a3b8"} strokeWidth={selected ? 3 : edge.thickness ?? 2} strokeDasharray={edge.dashed ? "6 4" : undefined} fill="none" markerEnd={edge.direction === "none" || edge.direction === "back" ? undefined : "url(#mm-arrow)"} markerStart={edge.direction === "back" || edge.direction === "both" ? "url(#mm-arrow)" : undefined} />
+              {edge.label && <text x={shape.mid.x} y={shape.mid.y - 10} fill="#e4e4e7" fontSize={12} textAnchor="middle">{edge.label}</text>}
+            </g>;
+          })}
+          {ui.tempEdge && project.nodes[ui.tempEdge.from] && <path d={bezierPoints(nearestAnchor(project.nodes[ui.tempEdge.from], { x: ui.tempEdge.toX, y: ui.tempEdge.toY }), { x: ui.tempEdge.toX, y: ui.tempEdge.toY }, "bezier").d} stroke="#22d3ee" strokeWidth={2} strokeDasharray="6 4" fill="none" />}
+        </svg>
+        {nodes.map(node => <MapNode key={node.id} node={{ ...node }} selected={ui.selectedNodeIds.includes(node.id)} connecting={ui.connectFromId === node.id} />)}
       </div>
-
-      {marqueeRect && (
-        <div
-          className="pointer-events-none absolute rounded-lg border border-cyan-400/40 bg-cyan-400/10"
-          style={{
-            left: marqueeRect.x,
-            top: marqueeRect.y,
-            width: marqueeRect.w,
-            height: marqueeRect.h,
-          }}
-        />
-      )}
-
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent,rgba(5,5,10,0.45))]" />
-      {(ui.connectFromId || ui.connectAwaitFirst) && (
-        <div className="pointer-events-none absolute left-1/2 top-4 z-30 flex -translate-x-1/2 items-center gap-2 rounded-xl border border-cyan-400/40 bg-cyan-500/20 px-4 py-2 text-xs font-medium text-cyan-100 backdrop-blur-md shadow-lg">
-          🔗 {ui.connectAwaitFirst ? "Connect mode: click the first node to start a connection" : ui.connectFromId ? `Connect mode: click a second node to link from "${project.nodes[ui.connectFromId]?.title ?? "Node"}"` : ""}
-          <span className="ml-2 rounded bg-black/30 px-1.5 py-0.5 text-[10px] text-cyan-200/80">ESC to cancel</span>
-        </div>
-      )}
-      <div
-        className="pointer-events-none absolute bottom-4 left-4 rounded-xl px-3 py-1.5 text-xs backdrop-blur"
-        style={{
-          background: "var(--mm-panel-bg)",
-          border: "1px solid var(--mm-panel-border)",
-          color: "var(--mm-text-secondary)",
-        }}
-      >        {currentWorld?.emoji ?? "🌐"} {currentWorld?.name ?? "World"} ·{" "}
-        <span className="font-mono text-cyan-300">
-          {Math.round(camera.zoom * 100)}%
-        </span>
-        <span className="ml-3 text-zinc-500">· Scroll to zoom · Shift+scroll to pan · Double-click empty = new</span>
-      </div>
+      {!nodes.length && <div className="mm-empty">This world is empty. Double-click here or choose + Node.</div>}
+      {(ui.connectFromId || ui.connectAwaitFirst) && <div className="mm-connect-hint" role="status">{ui.connectFromId ? "Choose another node to connect. Esc to cancel." : "Choose the first node."}</div>}
     </div>
   );
 }
 
-function Rulers({ camera }: { camera: { x: number; y: number; zoom: number } }) {
-  const step = 80 * camera.zoom;
-  return (
-    <>
-      <div className="pointer-events-none absolute left-0 top-0 h-6 w-full border-b border-white/5 bg-black/40 backdrop-blur-[1px]">
-        <div
-          className="relative h-full w-full"
-          style={{ transform: `translateX(${camera.x}px)` }}
-        >
-          {Array.from({ length: 60 }).map((_, i) => (
-            <div
-              key={"h" + i}
-              className="absolute top-0 h-full border-r border-white/10"
-              style={{ left: i * step }}
-            >
-              <span className="absolute left-1 top-0 text-[9px] text-zinc-500">
-                {Math.round((-camera.x + i * step) / camera.zoom)}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="pointer-events-none absolute left-0 top-0 h-full w-6 border-r border-white/5 bg-black/40 backdrop-blur-[1px]">
-        <div
-          className="relative h-full w-full"
-          style={{ transform: `translateY(${camera.y}px)` }}
-        >
-          {Array.from({ length: 60 }).map((_, i) => (
-            <div
-              key={"v" + i}
-              className="absolute left-0 w-full border-b border-white/10"
-              style={{ top: i * step }}
-            >
-              <span className="absolute top-0 left-0 text-[9px] text-zinc-500">
-                {Math.round((-camera.y + i * step) / camera.zoom)}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </>
-  );
-}
+const MapNode = memo(function MapNode({ node, selected, connecting }: { node: MMNode; selected: boolean; connecting: boolean }) {
+  return <div data-node-id={node.id} className={`mm-node${selected ? " is-selected" : ""}${connecting ? " is-connecting" : ""}`}
+    style={{ left: node.x, top: node.y, width: node.w, height: node.h, borderColor: selected || connecting ? "#22d3ee" : node.color?.stroke, background: node.color?.fill && !node.color.fill.endsWith("14") ? node.color.fill : undefined, color: node.color?.text }}
+    onDoubleClick={e => { e.stopPropagation(); if (node.childWorldId) actions.enterWorld(node.childWorldId); else { actions.selectNode(node.id); actions.setInspector(true); } }}>
+    <div className="mm-node-heading"><span>{node.childWorldId ? "◈" : node.kind === "checklist" ? "☑" : "•"}</span><strong>{node.title || "Untitled"}</strong>{node.locked && <span title="Position locked">⌑</span>}</div>
+    {(node.subtitle || node.description || node.notes) && <p>{node.subtitle || node.description || node.notes}</p>}
+    {node.checklist?.slice(0, 3).map(item => <label key={item.id} className="mm-check"><input type="checkbox" checked={item.done} onChange={e => actions.setChecklistItem(node.id, item.id, { done: e.target.checked })} />{item.text}</label>)}
+    {node.childWorldId && <button className="mm-enter" onClick={() => actions.enterWorld(node.childWorldId!)}>Open world →</button>}
+    <button data-port="left" className="mm-port mm-port-left" aria-label={`Connect ${node.title}`} title="Drag to another node, or click then choose a node" />
+    <button data-port="right" className="mm-port mm-port-right" aria-label={`Connect from ${node.title}`} title="Drag to another node, or click then choose a node" />
+    {selected && !node.locked && <button data-resize className="mm-resize" aria-label={`Resize ${node.title}`} />}
+  </div>;
+}, (prev, next) => prev.selected === next.selected && prev.connecting === next.connecting &&
+  prev.node.id === next.node.id && prev.node.x === next.node.x && prev.node.y === next.node.y &&
+  prev.node.w === next.node.w && prev.node.h === next.node.h && prev.node._v === next.node._v &&
+  prev.node.updated === next.node.updated && prev.node.title === next.node.title);

@@ -5,7 +5,7 @@ import { MindMapPageShell } from "@/components/mindmap/MindMapPageShell";
 export const metadata: Metadata = {
   title: "Mindmap",
   description:
-    "Snoxium Mindmap — infinite canvas, worlds, nodes, linked clones, portals, and offline persistence.",
+    "A simple canvas for ideas, connections and nested worlds. Save locally and export a backup.",
 };
 
 export default function MindMapPage() {
@@ -20,8 +20,8 @@ export default function MindMapPage() {
             🧠 Mindmap
           </h1>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-zinc-200/70">
-            Personal infinite canvas for ideas, projects, and worlds. 100%
-            offline, no login, autosaves to your browser.
+            Ideas, connections, and worlds. Your map saves in this browser;
+            download a backup to keep it or move it to another device.
           </p>
         </div>
         <div className="hidden items-center gap-2 md:flex">

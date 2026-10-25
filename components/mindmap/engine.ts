@@ -1,6 +1,6 @@
 import type { MMNode, MMEdge, Rect, Vec2, EdgeStyle, MMProject } from "./types";
 
-export const uid = (len = 9): string =>
+export const uid = (len = 16): string =>
   (crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 12)).slice(
     0,
     len,
@@ -71,7 +71,6 @@ export function bezierPoints(
   style: EdgeStyle,
 ): { d: string; mid: Vec2; controlA: Vec2; controlB: Vec2 } {
   const dx = Math.max(40, Math.abs(b.x - a.x) * 0.5);
-  const dy = Math.max(40, Math.abs(b.y - a.y) * 0.5);
   let controlA: Vec2;
   let controlB: Vec2;
   if (style === "straight") {
@@ -218,7 +217,7 @@ export function projectStats(p: MMProject) {
   const todos = nodes.filter((n) => n.status === "todo").length;
   const done = nodes.filter((n) => n.status === "done").length;
   const tagsCount = Object.values(p.tags).length;
-  let maxBranch = 0;
+  const maxBranch = 0;
   let mostConnected: string | null = null;
   let mostCount = -1;
   const counts: Record<string, number> = {};
