@@ -37,9 +37,10 @@ export function NodeEditor({ node }: { node: MMNode }) {
     const extra = Array.from(card.children).filter(e => e !== body && !e.matches(".mm-port,.mm-resize")).reduce((sum, e) => sum + (e as HTMLElement).offsetHeight + 8, 0);
     const contentHeight = Array.from(body.children).reduce((sum, e) => {
       const style = getComputedStyle(e);
-      return sum + (e as HTMLElement).offsetHeight + (parseFloat(style.marginTop) || 0) + (parseFloat(style.marginBottom) || 0);
+      const element = e as HTMLElement;
+      return sum + Math.max(element.offsetHeight, element.scrollHeight) + (parseFloat(style.marginTop) || 0) + (parseFloat(style.marginBottom) || 0);
     }, 0);
-    patch({ h: Math.max(100, Math.min(3000, contentHeight + extra + 40)) });
+    patch({ h: Math.max(130, Math.min(3000, contentHeight + extra + 56)) });
   };
   return <div className="mm-editor" onFocusCapture={e => {
     if ((e.target as HTMLElement).matches('textarea,input:not([type="checkbox"]):not([type="color"])') && undo.current == null) undo.current = beginUndoGroup();
