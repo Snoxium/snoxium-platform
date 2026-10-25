@@ -2,6 +2,7 @@ export type Game = {
   slug: string; name: string; tagline: string; description: string;
   status: string; platform: string; highlight: string; features: string[];
   playUrl?: string; playLabel?: string;
+  appStoreUrl?: string;
 };
 
 export const GAMES: Game[] = [
@@ -12,6 +13,7 @@ export const GAMES: Game[] = [
     highlight: "Running, characters, and a home world",
     features: ["Three-lane running with obstacles and coin collection", "Unlockable characters and items", "Challenges and leaderboard competition", "Ongoing work on world detail, animation, and mobile performance"],
     playUrl: "https://play.google.com/store/apps/details?id=net.snygames.runalong", playLabel: "View on Google Play",
+    appStoreUrl: "https://apps.apple.com/app/runalong/id1636757952",
   },
   {
     slug: "cleanup-club", name: "Cleanup Club", platform: "Roblox", status: "Cleaning simulator",

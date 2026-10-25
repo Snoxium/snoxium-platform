@@ -20,7 +20,10 @@ export default async function GamePage({ params }: Props) {
         <h1 className="text-4xl font-semibold tracking-tight sm:text-6xl">{game.name}</h1>
         <p className="text-xl text-zinc-200">{game.tagline}</p>
         <p className="max-w-2xl text-base leading-8 text-zinc-300">{game.description}</p>
-        {game.playUrl ? <a href={game.playUrl} target="_blank" rel="noopener noreferrer" className="inline-flex rounded-full bg-cyan-300 px-6 py-3 font-semibold text-slate-950 hover:bg-cyan-200">{game.playLabel} ↗</a> : <p className="text-sm text-zinc-400">Follow Snoxium for future project updates.</p>}
+        {game.playUrl ? <div className="flex flex-wrap gap-3">
+          <a href={game.playUrl} target="_blank" rel="noopener noreferrer" className="inline-flex rounded-full bg-cyan-300 px-6 py-3 font-semibold text-slate-950 hover:bg-cyan-200">{game.playLabel} ↗</a>
+          {game.appStoreUrl && <a href={game.appStoreUrl} target="_blank" rel="noopener noreferrer" className="inline-flex rounded-full bg-cyan-300 px-6 py-3 font-semibold text-slate-950 hover:bg-cyan-200">View on App Store ↗</a>}
+        </div> : <p className="text-sm text-zinc-400">Follow Snoxium for future project updates.</p>}
         {game.status === "Beta" && <p className="text-sm text-amber-200/80">This game is in beta. Features and balance may change.</p>}
       </section>
       <section className="rounded-3xl border border-white/10 bg-white/[0.03] p-7">
