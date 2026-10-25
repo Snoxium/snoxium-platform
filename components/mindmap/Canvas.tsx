@@ -4,7 +4,7 @@ import { memo, useEffect, useRef } from "react";
 import { actions, beginUndoGroup, endUndoGroup, getState, useStore, setViewportSize, bumpVersion, flushNotify } from "./store";
 import { bezierPoints, nearestAnchor, screenToWorld } from "./engine";
 import type { MMNode } from "./types";
-import { ChartContent, MarkdownContent } from "./NodeContent";
+import { ChartContent, ColoredTitle, MarkdownContent } from "./NodeContent";
 import { LinkPreviews } from "./LinkPreviews";
 import { settleNode, stretchNode } from "./nodeMotion";
 
@@ -231,7 +231,7 @@ const MapNode = memo(function MapNode({ node, selected, connecting }: { node: MM
   return <div data-node-id={node.id} className={`mm-node${selected ? " is-selected" : ""}${connecting ? " is-connecting" : ""}`}
     style={{ left: node.x, top: node.y, width: node.w, height: node.h, borderColor: node.color?.stroke, background: node.color?.fill, color: node.color?.text, fontSize: node.font?.size ?? 14, borderRadius: node.shape === "pill" ? 32 : node.shape === "document" ? 2 : 14 }}
     onDoubleClick={e => { e.stopPropagation(); if ((e.target as Element).closest("button, input, a")) return; actions.selectNode(node.id); actions.setInspector(true); }}>
-    <div className="mm-node-heading"><span>{worldId ? "◈" : node.kind === "checklist" ? "☑" : node.kind === "chart" ? "▥" : "•"}</span><strong>{node.title || "Untitled"}</strong>{node.locked && <span title="Position locked">⌑</span>}</div>
+    <div className="mm-node-heading"><span>{worldId ? "◈" : node.kind === "checklist" ? "☑" : node.kind === "chart" ? "▥" : "•"}</span><strong><ColoredTitle text={node.title || "Untitled"} enabled={node.textColors} /></strong>{node.locked && <span title="Position locked">⌑</span>}</div>
     <div className="mm-node-body">
       {node.kind === "code" ? <pre className="mm-code"><code>{node.notes ?? node.description}</code></pre> : (node.notes || node.description || node.subtitle) && <MarkdownContent text={node.notes ?? node.description ?? node.subtitle ?? ""} textColors={node.textColors} />}
       {node.kind === "chart" && node.chart && <ChartContent chart={node.chart} />}

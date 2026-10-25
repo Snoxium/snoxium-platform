@@ -1,15 +1,32 @@
 "use client";
 
-import { memo, useState } from "react";
+import { memo, useState, type CSSProperties } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { MMNode } from "./types";
 import { prepareDiscordMarkdown, remarkDiscord } from "./discordMarkdown";
 import { DiscordTimestamp } from "./DiscordTimestamp";
 import type { TimestampStyle } from "./timestamps";
+import { colorInline } from "./textColors";
 
 const plugins = [remarkGfm, remarkDiscord];
 const colorPlugins = [remarkGfm, [remarkDiscord, { textColors: true }] as [typeof remarkDiscord, { textColors: boolean }]];
+type ColorNode = { type: string; value?: string; children?: ColorNode[]; data?: { hProperties?: { style?: string; className?: string[] } } };
+// Titles only need color tokens: keep their text literal and avoid running the
+// full Markdown parser for every card while panning or dragging the canvas.
+export const ColoredTitle = memo(function ColoredTitle({ text, enabled }: { text: string; enabled?: boolean }) {
+  if (!enabled) return <>{text}</>;
+  const render = (nodes: ColorNode[]): React.ReactNode => nodes.map((node, index) => {
+    if (node.type === "text") return node.value;
+    const properties = node.data?.hProperties;
+    const style = Object.fromEntries((properties?.style ?? "").split(";").filter(Boolean).map(rule => {
+      const separator = rule.indexOf(":");
+      return [rule.slice(0, separator).replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase()), rule.slice(separator + 1)];
+    })) as CSSProperties;
+    return <span key={index} style={style} className={properties?.className?.join(" ")}>{render(node.children ?? [])}</span>;
+  });
+  return <>{render(colorInline([{ type: "text", value: text }]) as ColorNode[])}</>;
+});
 function Spoiler({ children }: { children: React.ReactNode }) {
   const [revealed, setRevealed] = useState(false);
   return <span className={`mm-spoiler${revealed ? " is-revealed" : ""}`}><button aria-label={revealed ? "Hide spoiler" : "Reveal spoiler"} aria-pressed={revealed} onClick={() => setRevealed(v => !v)}>{revealed ? "Hide" : "Spoiler"}</button><span aria-hidden={!revealed}>{children}</span></span>;
