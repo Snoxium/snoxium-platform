@@ -152,6 +152,7 @@ export function createNode(
     color: partial.color,
     shape: partial.shape ?? "card",
     opacity: partial.opacity,
+    glass: partial.glass,
     tags: partial.tags ?? [],
     status: partial.status,
     priority: partial.priority,

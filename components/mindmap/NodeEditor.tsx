@@ -5,6 +5,7 @@ import { actions, beginUndoGroup, endUndoGroup, useStore } from "./store";
 import { uid } from "./engine";
 import { MarkdownContent } from "./NodeContent";
 import { LinkPreviews } from "./LinkPreviews";
+import { backgroundColor, withBackgroundOpacity } from "./nodeAppearance";
 import type { MMNode, NodeKind, NodeStatus } from "./types";
 
 export function NodeEditor({ node }: { node: MMNode }) {
@@ -19,6 +20,7 @@ export function NodeEditor({ node }: { node: MMNode }) {
   const notes = node.notes ?? node.description ?? "";
   const destination = node.linkedWorldId ?? node.childWorldId;
   const chart = node.chart ?? { type: "bar" as const, data: [] };
+  const background = backgroundColor(node.color?.fill);
   const color = (key: "stroke" | "fill" | "text", fallback: string) => /^#[0-9a-f]{6}$/i.test(node.color?.[key] ?? "") ? node.color![key]! : fallback;
   const changeKind = (kind: NodeKind) => {
     if (kind === "world") { if (!destination) actions.convertToWorld(node.id); else patch({ kind }); return; }
@@ -79,8 +81,11 @@ export function NodeEditor({ node }: { node: MMNode }) {
         </div>}
       </section>
       <details className="mm-editor-section" open><summary>Appearance</summary>
-        <div className="mm-color-grid">{([['fill','Background','#181826'],['stroke','Border','#475569'],['text','Text','#e4e4e7']] as const).map(([key,label,fallback]) => <label key={key}>{label}<input aria-label={`Node ${label.toLowerCase()} color`} type="color" value={color(key, fallback)} onChange={e => patch({ color: { ...node.color, [key]: e.target.value } })} /></label>)}</div>
-        <div className="mm-swatches" aria-label="Color presets">{['#22d3ee','#a78bfa','#f472b6','#fb7185','#fbbf24','#34d399'].map(c => <button key={c} aria-label={`Use ${c} colors`} style={{ background: c }} onClick={() => patch({ color: { fill: c + '20', stroke: c, text: '#f4f4f5' } })} />)}<button onClick={() => patch({ color: undefined })}>Reset</button></div>
+        <div className="mm-color-grid">{([['fill','Background','#181826'],['stroke','Border','#475569'],['text','Text','#e4e4e7']] as const).map(([key,label,fallback]) => <label key={key}>{label}<input aria-label={`Node ${label.toLowerCase()} color`} type="color" value={key === 'fill' ? background.color : color(key, fallback)} onChange={e => patch({ color: { ...node.color, [key]: key === 'fill' ? withBackgroundOpacity(e.target.value, background.opacity) : e.target.value } })} /></label>)}</div>
+        <label>Background opacity · {background.opacity}%<input aria-label="Background opacity" type="range" min="0" max="100" step="1" value={background.opacity} onChange={e => patch({ color: { ...node.color, fill: withBackgroundOpacity(background.color, Number(e.target.value)) } })} /></label>
+        <label className="mm-check"><input type="checkbox" checked={node.glass !== false} onChange={e => patch({ glass: e.target.checked })} />Glass finish</label>
+        <p className="mm-muted">Lower opacity to see through the background. Text stays clear.</p>
+        <div className="mm-swatches" aria-label="Color presets">{['#22d3ee','#a78bfa','#f472b6','#fb7185','#fbbf24','#34d399'].map(c => <button key={c} aria-label={`Use ${c} colors`} style={{ background: c }} onClick={() => patch({ color: { fill: withBackgroundOpacity(c, background.opacity), stroke: c, text: '#f4f4f5' } })} />)}<button onClick={() => patch({ color: undefined, glass: undefined })}>Reset</button></div>
         <div className="mm-field-grid"><label>Shape<select value={node.shape ?? "card"} onChange={e => patch({ shape: e.target.value as MMNode['shape'] })}><option value="card">Rounded card</option><option value="pill">Pill</option><option value="document">Square card</option></select></label><label>Text size<input aria-label="Node font size" type="number" min="10" max="48" value={node.font?.size ?? 14} onChange={e => patch({ font: { ...node.font, size: Math.max(10, Math.min(48, Number(e.target.value) || 14)) } })} /></label></div>
         <div className="mm-field-grid"><label>Width<input aria-label="Node width" type="number" min="100" max="3000" value={node.w} onChange={e => patch({ w: Math.max(100, Math.min(3000, Number(e.target.value) || 100)) })} /></label><label>Height<input aria-label="Node height" type="number" min="80" max="3000" value={node.h} onChange={e => patch({ h: Math.max(80, Math.min(3000, Number(e.target.value) || 80)) })} /></label></div>
         <button onClick={fitContent}>Fit content</button>

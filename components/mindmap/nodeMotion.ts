@@ -1,28 +1,75 @@
-const active = new WeakMap<HTMLElement, Animation>();
+type Pose = { x: number; y: number; angle: number; skew: number; sx: number; sy: number };
+type Spring = { pose: Pose; velocity: Pose; target: Pose; frame: number; last: number; lastInput: number; held: boolean };
+const active = new WeakMap<HTMLElement, Spring>();
+const zero = (): Pose => ({ x: 0, y: 0, angle: 0, skew: 0, sx: 0, sy: 0 });
+const axes = Object.keys(zero()) as Array<keyof Pose>;
 const clamp = (n: number, limit: number) => Math.max(-limit, Math.min(limit, n));
 
-/** Decorative only: the store and connection endpoints always retain their exact position. */
+function clear(element: HTMLElement, spring: Spring) {
+  cancelAnimationFrame(spring.frame);
+  element.style.removeProperty("transform");
+  element.classList.remove("is-dragging");
+  active.delete(element);
+}
+
+function wake(element: HTMLElement, spring: Spring) {
+  if (spring.frame) return;
+  spring.last = performance.now();
+  const tick = (now: number) => {
+    // Small integration steps keep the spring stable across slow frames and tab pauses.
+    const elapsed = Math.min(32, Math.max(0, now - spring.last)) / 1000;
+    spring.last = now;
+    if (spring.held && now - spring.lastInput > 80) spring.target = { ...zero(), sx: .02, sy: .02 };
+    const steps = Math.max(1, Math.ceil(elapsed * 120)), dt = elapsed / steps;
+    let moving = false;
+    for (let step = 0; step < steps; step++) {
+      for (const axis of axes) {
+        const distance = spring.target[axis] - spring.pose[axis];
+        spring.velocity[axis] += (distance * 290 - spring.velocity[axis] * (spring.held ? 20 : 15)) * dt;
+        spring.pose[axis] += spring.velocity[axis] * dt;
+      }
+    }
+    for (const axis of axes) {
+      const tolerance = axis === "sx" || axis === "sy" ? .00015 : .003;
+      if (Math.abs(spring.target[axis] - spring.pose[axis]) > tolerance || Math.abs(spring.velocity[axis]) > tolerance * 12) moving = true;
+    }
+    const p = spring.pose;
+    element.style.transform = `translate(${p.x}px,${p.y}px) rotate(${p.angle}deg) skew(${p.skew}deg) scale(${1 + p.sx},${1 + p.sy})`;
+    spring.frame = 0;
+    if (moving) spring.frame = requestAnimationFrame(tick);
+    else if (!spring.held) clear(element, spring);
+  };
+  spring.frame = requestAnimationFrame(tick);
+}
+
+/** Decorative spring only: saved positions and connection endpoints stay exact. */
 export function stretchNode(element: HTMLElement, vx: number, vy: number) {
-  active.get(element)?.cancel(); active.delete(element);
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { settleNode(element, true); return; }
+  let spring = active.get(element);
+  if (!spring) {
+    spring = { pose: zero(), velocity: zero(), target: zero(), frame: 0, last: 0, lastInput: 0, held: true };
+    active.set(element, spring);
+  }
   const speed = Math.min(1, Math.hypot(vx, vy) / 24);
+  const horizontal = Math.abs(vx) / (Math.hypot(vx, vy) || 1);
+  spring.held = true;
+  spring.lastInput = performance.now();
+  spring.target = {
+    x: -clamp(vx * .22, 4), y: -clamp(vy * .22, 4),
+    angle: clamp(vx * .075, 2.4), skew: clamp((vx - vy * .35) * .08, 2.2),
+    sx: .02 + speed * (.05 * horizontal - .025 * (1 - horizontal)),
+    sy: .02 + speed * (.05 * (1 - horizontal) - .025 * horizontal),
+  };
   element.classList.add("is-dragging");
-  element.style.transform = `translate(${-clamp(vx * .18, 3)}px,${-clamp(vy * .18, 3)}px) rotate(${clamp(vx * .065, 1.8)}deg) skew(${clamp(vx * .085, 2.2)}deg,${clamp(vy * .065, 1.6)}deg) scale(${1.012 + speed * .025},${1.012 - speed * .018})`;
+  wake(element, spring);
 }
 
 export function settleNode(element: HTMLElement, immediate = false) {
-  active.get(element)?.cancel(); active.delete(element);
-  const from = element.style.transform;
-  element.style.removeProperty("transform");
+  const spring = active.get(element);
+  if (!spring) return;
+  if (immediate || window.matchMedia("(prefers-reduced-motion: reduce)").matches) { clear(element, spring); return; }
+  spring.held = false;
+  spring.target = zero();
   element.classList.remove("is-dragging");
-  if (!from || immediate || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  const animation = element.animate([
-    { transform: from, offset: 0 },
-    { transform: "scale(.981,1.024) rotate(-.5deg)", offset: .26 },
-    { transform: "scale(1.012,.989) rotate(.25deg)", offset: .5 },
-    { transform: "scale(.996,1.005) rotate(-.08deg)", offset: .74 },
-    { transform: "none", offset: 1 },
-  ], { duration: 580, easing: "cubic-bezier(.22,.65,.3,1)" });
-  active.set(element, animation);
-  // Cancel the finished animation so the browser stops caching a transformed text layer.
-  void animation.finished.then(() => { if (active.get(element) === animation) { animation.cancel(); active.delete(element); } }).catch(() => {});
+  wake(element, spring);
 }

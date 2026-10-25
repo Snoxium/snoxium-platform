@@ -78,10 +78,13 @@
 .mm-help { font-size:11px; line-height:1.7; color:#94a3b8; }
 .mm-preview { border:1px solid #ffffff18; border-radius:8px; padding:12px; min-height:100px; overflow:auto; }
 .mm-node { display:flex; flex-direction:column; }
-.mm-node { isolation:isolate; transform-origin:50% 45%; box-shadow:0 8px 20px #0003,inset 1px 0 #67e8f90b,inset -1px 0 #f0abfc0b,inset 0 1px #ffffff12; }
-.mm-node::before { content:""; position:absolute; inset:0; border-radius:inherit; pointer-events:none; z-index:-1; background:linear-gradient(145deg,#ffffff09 0%,#ffffff02 30%,transparent 55%),radial-gradient(ellipse at 100% 0%,#c084fc09,transparent 65%); }
-.mm-node.is-dragging { cursor:grabbing; box-shadow:0 15px 35px #0005,inset 1px 0 #67e8f929,inset -1px 0 #f0abfc24,inset 0 1px #ffffff25; }
-.mm-node.is-dragging::before { background:linear-gradient(125deg,#67e8f90a,#ffffff0b 28%,transparent 58%,#f0abfc08); }
+.mm-node { isolation:isolate; transform-origin:50% 45%; box-shadow:0 8px 20px #0003; transition:box-shadow 180ms ease; }
+.mm-node::before { content:""; position:absolute; inset:0; border-radius:inherit; pointer-events:none; z-index:-1; }
+.mm-node.is-glass { box-shadow:0 8px 20px #0003,inset 1px 0 #67e8f917,inset -1px 0 #f0abfc17,inset 0 1px #ffffff24; }
+.mm-node.is-glass::before { backdrop-filter:blur(3px) saturate(1.12); background:linear-gradient(145deg,#ffffff0e 0%,#ffffff02 30%,transparent 55%),radial-gradient(ellipse at 100% 0%,#c084fc0b,transparent 65%); }
+.mm-node.is-dragging { cursor:grabbing; box-shadow:0 20px 40px #0006; }
+.mm-node.is-glass.is-dragging { box-shadow:0 20px 40px #0006,inset 1px 0 #67e8f942,inset -1px 0 #f0abfc35,inset 0 1px #ffffff40; }
+.mm-node.is-glass.is-dragging::before { background:linear-gradient(125deg,#67e8f914,#ffffff16 28%,transparent 58%,#f0abfc10); }
 .mm-markdown u { text-decoration:underline; text-underline-offset:3px; }
 .mm-timestamp { background:#ffffff12; border-radius:4px; padding:1px 4px; white-space:normal; font-variant-numeric:tabular-nums; }
 .mm-app .mm-text-gradient { background-clip:text; -webkit-background-clip:text; color:transparent; -webkit-text-fill-color:transparent; box-decoration-break:clone; }

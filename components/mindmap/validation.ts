@@ -35,6 +35,7 @@ export function parseProject(text: string): MMProject {
     for (const key of ["subtitle", "description", "notes", "icon"])
       if (node[key] != null && typeof node[key] !== "string") return fail();
     if (node.textColors != null && typeof node.textColors !== "boolean") return fail();
+    if (node.glass != null && typeof node.glass !== "boolean") return fail();
     if (node.linkPreviews != null) {
       if (!record(node.linkPreviews) || Object.keys(node.linkPreviews).length > 100) return fail();
       for (const [url, preview] of Object.entries(node.linkPreviews)) {

@@ -234,7 +234,7 @@ export function Canvas() {
 
 const MapNode = memo(function MapNode({ node, selected, connecting }: { node: MMNode; selected: boolean; connecting: boolean }) {
   const worldId = node.linkedWorldId ?? node.childWorldId;
-  return <div data-node-id={node.id} className={`mm-node${selected ? " is-selected" : ""}${connecting ? " is-connecting" : ""}`}
+  return <div data-node-id={node.id} className={`mm-node${node.glass !== false ? " is-glass" : ""}${selected ? " is-selected" : ""}${connecting ? " is-connecting" : ""}`}
     style={{ left: node.x, top: node.y, width: node.w, height: node.h, borderColor: node.color?.stroke, background: node.color?.fill, color: node.color?.text, fontSize: node.font?.size ?? 14, borderRadius: node.shape === "pill" ? 32 : node.shape === "document" ? 2 : 14 }}
     onDoubleClick={e => { e.stopPropagation(); if ((e.target as Element).closest("button, input, a")) return; actions.selectNode(node.id); actions.setInspector(true); }}>
     <div className="mm-node-heading"><span>{worldId ? "◈" : node.kind === "checklist" ? "☑" : node.kind === "chart" ? "▥" : "•"}</span><strong><ColoredTitle text={node.title || "Untitled"} enabled={node.textColors} /></strong>{node.locked && <span title="Position locked">⌑</span>}</div>

@@ -78,6 +78,7 @@ export interface MMNode {
   color?: MMColor;
   shape?: "card" | "pill" | "diamond" | "hex" | "circle" | "document";
   opacity?: number;
+  glass?: boolean;
   tags: string[];
   status?: NodeStatus;
   priority?: 0 | 1 | 2 | 3 | 4;

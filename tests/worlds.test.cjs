@@ -57,3 +57,12 @@ assert.deepEqual(getState().project.nodes[copy].linkPreviews,{[url]:preview});as
 assert.doesNotThrow(()=>actions.importJSON(actions.exportJSON()));
 const bad=JSON.parse(actions.exportJSON());bad.nodes[copy].linkPreviews[url].image='javascript:alert(1)';assert.throws(()=>actions.importJSON(JSON.stringify(bad)));
 });
+
+test('glass finish and background alpha survive duplication and JSON backups',()=>{
+const id=actions.createNodeAt(0,0,{title:'Glass sample'});
+actions.updateNode(id,{glass:false,color:{fill:'#22d3ee66',stroke:'#22d3ee'}});
+const [copy]=actions.duplicateNodes([id]);assert.equal(getState().project.nodes[copy].glass,false);
+assert.equal(getState().project.nodes[copy].color.fill,'#22d3ee66');
+actions.importJSON(actions.exportJSON());assert.equal(getState().project.nodes[copy].glass,false);
+const bad=JSON.parse(actions.exportJSON());bad.nodes[copy].glass='yes';assert.throws(()=>actions.importJSON(JSON.stringify(bad)));
+});
