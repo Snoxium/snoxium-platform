@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Canvas } from "./Canvas";
 import { actions, getState, setViewportSize, useStore, viewportSizeRef } from "./store";
-import { download, exportMapImage, toMarkdown } from "./exporters";
+import { download, exportMapImage } from "./exporters";
 import { NodeEditor } from "./NodeEditor";
 
 export function MindMapApp() {
@@ -73,8 +73,8 @@ export function MindMapApp() {
     return id;
   };
   const backup = () => download(`${project.name.replace(/[^a-z0-9-]/gi, "-") || "mindmap"}.json`, actions.exportJSON(), "application/json");
-  const image = async (kind: "svg" | "png") => {
-    try { await exportMapImage(project, kind); setMessage(`${kind.toUpperCase()} downloaded.`); }
+  const image = async () => {
+    try { await exportMapImage(project, "png"); setMessage("PNG downloaded."); }
     catch (error) { setMessage(error instanceof Error ? error.message : "Export failed. Try JSON backup instead."); }
   };
   const matches = search.trim() ? Object.values(project.nodes).filter(n => n.title.toLowerCase().includes(search.toLowerCase())).slice(0, 20) : [];
@@ -84,12 +84,9 @@ export function MindMapApp() {
       <button onClick={() => setWorldsOpen(v => !v)} aria-expanded={worldsOpen}>◈ Worlds</button>
       <div className="mm-breadcrumbs" aria-label="World path">{crumbs.map((w, index) => <span key={w.id}>{index > 0 && <span className="mm-muted"> / </span>}<button onClick={() => { actions.cancelConnect(); actions.enterWorld(w.id); }}>{w.name}</button></span>)}</div>
       <div className="mm-tools">
-        <div className="mm-tool-group" aria-label="Create and connect">
+        <div className="mm-tool-group" aria-label="Create nodes">
         <button onClick={() => add()} title="Add node (N)">+ Node</button>
         <button onClick={() => add(true)}>+ World</button>
-        <button className={ui.connectFromId || ui.connectAwaitFirst ? "is-active" : ""} onClick={() => {
-          if (ui.connectFromId || ui.connectAwaitFirst) actions.cancelConnect(); else actions.startConnect(ui.selectedNodeIds.length === 1 ? ui.selectedNodeIds[0] : undefined);
-        }}>↗ Connect</button>
         </div><div className="mm-tool-group" aria-label="History">
         <button onClick={() => actions.undo()} title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
         <button onClick={() => actions.redo()} title="Redo (Ctrl+Shift+Z)" aria-label="Redo">↷</button>
@@ -102,11 +99,18 @@ export function MindMapApp() {
       </div>
     </div>
     {moreOpen && <div className="mm-filebar" role="region" aria-label="Files and settings">
-      <div className="mm-panel-heading"><strong>Files & settings</strong><button onClick={() => setMoreOpen(false)} aria-label="Close settings">&times;</button></div>
-      <div className="mm-settings-grid">
-        <section><h3>Map & world</h3><label>Map name<input aria-label="Map name" value={project.name} onChange={e => actions.setProjectName(e.target.value)} /></label><label>World name<input aria-label="World name" value={current.name} onChange={e => actions.renameWorld(current.id, e.target.value)} /></label></section>
-        <section><h3>Save & export</h3><div className="mm-button-row"><button onClick={backup}>Download backup</button><button onClick={() => fileInput.current?.click()}>Import JSON</button></div><div className="mm-button-row"><button onClick={() => image("png")}>PNG</button><button onClick={() => image("svg")}>SVG</button><button onClick={() => download(`${project.name}.md`, toMarkdown(project), "text/markdown")}>Markdown</button></div><p className="mm-muted">Images export the current world. JSON backs up every world.</p></section>
-        <section><h3>Canvas preferences</h3><label className="mm-check"><input type="checkbox" checked={project.settings.gridEnabled} onChange={e => actions.updateSettings({ gridEnabled: e.target.checked })} />Grid</label><label className="mm-check"><input type="checkbox" checked={project.settings.snapToGrid} onChange={e => actions.updateSettings({ snapToGrid: e.target.checked })} />Snap to grid</label><label className="mm-check"><input type="checkbox" checked={project.settings.autoSave} onChange={e => actions.updateSettings({ autoSave: e.target.checked })} />Autosave</label><button onClick={() => actions.saveNow()}>Save now</button></section>
+      <div className="mm-settings-names">
+        <label>Map name<input aria-label="Map name" value={project.name} onChange={e => actions.setProjectName(e.target.value)} /></label>
+        <label>World name<input aria-label="World name" value={current.name} onChange={e => actions.renameWorld(current.id, e.target.value)} /></label>
+      </div>
+      <div className="mm-settings-files" aria-label="Import and export">
+        <div className="mm-button-row"><button onClick={backup}>Export JSON</button><button onClick={() => fileInput.current?.click()}>Import JSON</button><button onClick={image}>PNG</button></div>
+        <small className="mm-muted">JSON: all worlds · PNG: current world</small>
+      </div>
+      <div className="mm-settings-preferences" aria-label="Canvas preferences">
+        <label className="mm-check"><input type="checkbox" checked={project.settings.gridEnabled} onChange={e => actions.updateSettings({ gridEnabled: e.target.checked })} />Grid</label>
+        <label className="mm-check"><input type="checkbox" checked={project.settings.snapToGrid} onChange={e => actions.updateSettings({ snapToGrid: e.target.checked })} />Snap to grid</label>
+        <div className="mm-settings-save"><label className="mm-check"><input type="checkbox" checked={project.settings.autoSave} onChange={e => actions.updateSettings({ autoSave: e.target.checked })} />Autosave</label>{!project.settings.autoSave && <button onClick={() => actions.saveNow()}>Save now</button>}</div>
       </div>
     </div>}
     <input ref={fileInput} aria-label="Import mindmap file" type="file" accept=".json,application/json" hidden onChange={async e => {
@@ -121,7 +125,7 @@ export function MindMapApp() {
         actions.importJSON(text); setMessage("Map imported.");
       } catch (error) { setMessage(error instanceof Error ? error.message : "Could not import this file."); }
     }} />
-    {state.saveError && <div className="mm-error" role="alert">{state.saveError} <button onClick={backup}>Download backup</button></div>}
+    {state.saveError && <div className="mm-error" role="alert">{state.saveError} <button onClick={backup}>Export JSON</button></div>}
     {state.recoveryRaw && <div className="mm-error"><button onClick={() => download("mindmap-recovery.json", state.recoveryRaw!, "application/json")}>Download original recovery file</button></div>}
     {message && <div className="mm-notice" role="status">{message}<button onClick={() => setMessage("")} aria-label="Dismiss message">×</button></div>}
     <div className="mm-workspace">
@@ -147,6 +151,6 @@ export function MindMapApp() {
         </>}
       </aside>}
     </div>
-    <div className="mm-status"><span>Drag background to pan · Scroll to zoom · Drag a dot to connect · Double-click to edit</span><span aria-live="polite">{state.dirty ? "Unsaved changes" : state.lastSavedAt ? "Saved in this browser" : "Stored in this browser"} · <button onClick={backup}>Backup</button></span></div>
+    <div className="mm-status"><span>Drag background to pan · Scroll to zoom · Drag a dot to connect · Double-click to edit</span><span aria-live="polite">{state.dirty ? "Unsaved changes" : state.lastSavedAt ? "Saved in this browser" : "Stored in this browser"} · <button onClick={backup}>Export JSON</button></span></div>
   </div>;
 }

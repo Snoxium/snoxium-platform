@@ -20,8 +20,7 @@ export default function MindMapPage() {
             🧠 Mindmap
           </h1>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-zinc-200/70">
-            Ideas, connections, and worlds. Your map saves in this browser;
-            download a backup to keep it or move it to another device.
+            Ideas and worlds, saved in your browser.
           </p>
         </div>
         <div className="hidden items-center gap-2 md:flex">

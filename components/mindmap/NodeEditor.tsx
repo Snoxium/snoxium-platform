@@ -93,6 +93,6 @@ export function NodeEditor({ node }: { node: MMNode }) {
     </fieldset>
     <label className="mm-check"><input type="checkbox" checked={!!node.locked} onChange={() => actions.toggleNode(node.id, "locked")} />Lock position</label>
     <label className="mm-check"><input type="checkbox" checked={!!node.editLocked} onChange={() => actions.toggleNode(node.id, "editLocked")} />Lock editing</label>
-    <div className="mm-node-actions"><button onClick={() => actions.startConnect(node.id)}>Connect</button><button onClick={() => actions.duplicateNodes([node.id])}>Duplicate node</button><button className="mm-danger" onClick={() => actions.deleteNodes([node.id])}>Delete node</button></div>
+    <div className="mm-node-actions"><button onClick={() => actions.duplicateNodes([node.id])}>Duplicate node</button><button className="mm-danger" onClick={() => actions.deleteNodes([node.id])}>Delete node</button></div>
   </div>;
 }
